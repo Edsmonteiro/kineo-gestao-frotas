@@ -1019,7 +1019,7 @@ else:
 
             st.markdown("<br>", unsafe_allow_html=True)
 
-            # ── Atenção operacional ───────────────────────────────────────────────
+            # ── Alertas e manutenção preventiva ───────────────────────────────────
             alertas = []
             if contratos_vencendo_30:
                 alertas.append(("Contratos próximos do vencimento", f"{contratos_vencendo_30} contrato(s) vencem nos próximos 30 dias."))
@@ -1065,16 +1065,16 @@ else:
                     for idx, (titulo, descricao) in enumerate(alertas[:4]):
                         with cols_alerta[idx]:
                             st.markdown(f"""
-                            <div style="min-height:115px;padding:16px;border:1px solid #E5E7EB;border-radius:10px;background:#F8FAFC;">
-                                <div style="font-size:12px;color:#64748B;text-transform:uppercase;font-weight:600;margin-bottom:8px;">{titulo}</div>
-                                <div style="font-size:14px;font-weight:600;color:#111827;line-height:1.4;">{descricao}</div>
+                            <div style="min-height:96px;padding:14px;border:1px solid #E5E7EB;border-radius:10px;background:#F8FAFC;">
+                                <div style="font-size:11px;color:#64748B;text-transform:uppercase;font-weight:600;margin-bottom:6px;">{titulo}</div>
+                                <div style="font-size:13px;font-weight:600;color:#111827;line-height:1.35;">{descricao}</div>
                             </div>
                             """, unsafe_allow_html=True)
 
-            st.markdown("<br>", unsafe_allow_html=True)
+                st.markdown("<br>", unsafe_allow_html=True)
 
-            # ── Frota + contratos ─────────────────────────────────────────────────
-            col_frota, col_contratos = st.columns([1.25, 1])
+            # ── Linha principal: frota + contratos ─────────────────────────────────
+            col_frota, col_contratos = st.columns([1.15, 1])
 
             with col_frota:
                 with st.container(border=True):
@@ -1101,8 +1101,11 @@ else:
                             }
                         )
                         fig_frota.update_traces(textposition="outside", textinfo="label+value")
-                        fig_frota.add_annotation(text=f"<b>{veiculos_totais}</b><br>veículos", x=0.5, y=0.5, showarrow=False, font=dict(size=18))
-                        fig_frota.update_layout(**PLOTLY_LAYOUT, height=300, showlegend=False)
+                        fig_frota.add_annotation(
+                            text=f"<b>{veiculos_totais}</b><br>veículos",
+                            x=0.5, y=0.5, showarrow=False, font=dict(size=18)
+                        )
+                        fig_frota.update_layout(**PLOTLY_LAYOUT, height=255, showlegend=False)
                         st.plotly_chart(fig_frota, use_container_width=True, config={"displayModeBar": False})
 
                         f1, f2, f3 = st.columns(3)
@@ -1134,81 +1137,76 @@ else:
 
             st.markdown("<br>", unsafe_allow_html=True)
 
-            # ── Evolução financeira ───────────────────────────────────────────────
-            with st.container(border=True):
-                st.markdown("### Evolução Financeira")
-                st.caption("Faturamento e despesas ao longo dos meses.")
-                frames_fluxo = []
+            # ── Linha adaptativa: financeiro + saúde da frota ──────────────────────
+            col_fin, col_saude = st.columns([1.35, 1])
 
-                if not df_custos.empty:
-                    dc = df_custos.groupby("mes_ano")["valor_total"].sum().reset_index()
-                    dc.columns = ["mes_ano", "valor"]
-                    dc["tipo"] = "Despesas"
-                    frames_fluxo.append(dc)
-
-                if not df_cobrancas.empty:
-                    dr = df_cobrancas.groupby("mes_ano")["valor_previsto"].sum().reset_index()
-                    dr.columns = ["mes_ano", "valor"]
-                    dr["tipo"] = "Faturamento"
-                    frames_fluxo.append(dr)
-
-                if frames_fluxo:
-                    df_fluxo = pd.concat(frames_fluxo, ignore_index=True)
-                    df_fluxo["data_ordem"] = pd.to_datetime(df_fluxo["mes_ano"], format="%m/%Y", errors="coerce")
-                    df_fluxo = df_fluxo.dropna(subset=["data_ordem"]).sort_values("data_ordem")
-                    meses = df_fluxo["mes_ano"].drop_duplicates().tolist()[-12:]
-                    df_fluxo = df_fluxo[df_fluxo["mes_ano"].isin(meses)]
-
-                    fig_fluxo = px.bar(
-                        df_fluxo,
-                        x="mes_ano",
-                        y="valor",
-                        color="tipo",
-                        barmode="group",
-                        text="valor",
-                        color_discrete_map={"Faturamento": PALETTE["green"], "Despesas": PALETTE["red"]}
-                    )
-                    fig_fluxo.update_traces(texttemplate="R$ %{text:,.0f}", textposition="outside")
-                    fig_fluxo.update_layout(
-                        **PLOTLY_LAYOUT,
-                        height=330,
-                        xaxis=dict(title="", type="category"),
-                        yaxis=dict(title="", tickprefix="R$ "),
-                        legend=dict(title="", orientation="h", y=1.10, x=1, xanchor="right")
-                    )
-                    st.plotly_chart(fig_fluxo, use_container_width=True, config={"displayModeBar": False})
-                else:
-                    st.info("Ainda não existem dados financeiros suficientes para montar a evolução mensal.", icon=None)
-
-            st.markdown("<br>", unsafe_allow_html=True)
-
-            # ── Custos + saúde da frota ───────────────────────────────────────────
-            col_custos, col_saude = st.columns([1.25, 1])
-
-            with col_custos:
+            with col_fin:
                 with st.container(border=True):
-                    st.markdown("### Maiores Custos por Veículo")
-                    st.caption("Veículos com maior impacto financeiro.")
+                    if not df_custos.empty or not df_cobrancas.empty:
+                        st.markdown("### Evolução Financeira")
+                        st.caption("Faturamento e despesas ao longo dos meses.")
 
-                    if not df_custos.empty:
-                        df_gastos = (
-                            df_custos.groupby(["veiculo_id", "placa", "modelo"], dropna=False)["valor_total"]
-                            .sum().reset_index().sort_values("valor_total", ascending=False).head(5)
-                        )
-                        if not df_gastos.empty:
-                            df_gastos["veiculo"] = df_gastos["placa"].fillna("Sem placa").astype(str) + " · " + df_gastos["modelo"].fillna("").astype(str)
-                            fig_gastos = px.bar(
-                                df_gastos.sort_values("valor_total"),
-                                x="valor_total", y="veiculo", orientation="h", text="valor_total",
-                                color_discrete_sequence=[PALETTE["indigo"]]
+                        frames_fluxo = []
+
+                        if not df_custos.empty:
+                            dc = df_custos.groupby("mes_ano")["valor_total"].sum().reset_index()
+                            dc.columns = ["mes_ano", "valor"]
+                            dc["tipo"] = "Despesas"
+                            frames_fluxo.append(dc)
+
+                        if not df_cobrancas.empty:
+                            dr = df_cobrancas.groupby("mes_ano")["valor_previsto"].sum().reset_index()
+                            dr.columns = ["mes_ano", "valor"]
+                            dr["tipo"] = "Faturamento"
+                            frames_fluxo.append(dr)
+
+                        df_fluxo = pd.concat(frames_fluxo, ignore_index=True)
+                        df_fluxo["data_ordem"] = pd.to_datetime(df_fluxo["mes_ano"], format="%m/%Y", errors="coerce")
+                        df_fluxo = df_fluxo.dropna(subset=["data_ordem"]).sort_values("data_ordem")
+
+                        if not df_fluxo.empty:
+                            meses = df_fluxo["mes_ano"].drop_duplicates().tolist()[-12:]
+                            df_fluxo = df_fluxo[df_fluxo["mes_ano"].isin(meses)]
+
+                            fig_fluxo = px.bar(
+                                df_fluxo,
+                                x="mes_ano",
+                                y="valor",
+                                color="tipo",
+                                barmode="group",
+                                text="valor",
+                                color_discrete_map={
+                                    "Faturamento": PALETTE["green"],
+                                    "Despesas": PALETTE["red"]
+                                }
                             )
-                            fig_gastos.update_traces(texttemplate="R$ %{text:,.0f}", textposition="outside")
-                            fig_gastos.update_layout(**PLOTLY_LAYOUT, height=290, xaxis=dict(title="", visible=False), yaxis=dict(title=""))
-                            st.plotly_chart(fig_gastos, use_container_width=True, config={"displayModeBar": False})
+                            fig_fluxo.update_traces(texttemplate="R$ %{text:,.0f}", textposition="outside")
+                            fig_fluxo.update_layout(
+                                **PLOTLY_LAYOUT,
+                                height=285,
+                                xaxis=dict(title="", type="category"),
+                                yaxis=dict(title="", tickprefix="R$ "),
+                                legend=dict(title="", orientation="h", y=1.10, x=1, xanchor="right")
+                            )
+                            st.plotly_chart(fig_fluxo, use_container_width=True, config={"displayModeBar": False})
                         else:
-                            st.info("Nenhum custo por veículo encontrado.", icon=None)
+                            st.info("Ainda não há histórico mensal suficiente.", icon=None)
                     else:
-                        st.info("Nenhuma despesa registrada.", icon=None)
+                        st.markdown("### Visão Financeira")
+                        st.caption("Resumo compacto enquanto ainda não há movimentação financeira.")
+
+                        vf1, vf2 = st.columns(2)
+                        vf1.metric("Receita no mês", fmt_brl(faturamento_mes_atual))
+                        vf2.metric("Despesa no mês", fmt_brl(custos_mes_atual))
+
+                        vf3, vf4 = st.columns(2)
+                        vf3.metric("Saldo do mês", fmt_brl(saldo_mes))
+                        vf4.metric("Cobranças vencidas", inadimplencia_qtd)
+
+                        st.info(
+                            "Cadastre despesas ou cobranças para habilitar o gráfico de evolução mensal.",
+                            icon=None
+                        )
 
             with col_saude:
                 with st.container(border=True):
@@ -1229,11 +1227,131 @@ else:
                     if revisoes_proximas:
                         st.markdown("---")
                         st.markdown("**Veículos que exigem atenção**")
-                        for placa, km_rodado in revisoes_proximas[:5]:
+                        for placa, km_rodado in revisoes_proximas[:4]:
                             st.caption(f"{placa} · {km_rodado:,.0f} km desde a última preventiva")
                     elif veiculos_manutencao == 0:
                         st.success("Nenhum alerta crítico de manutenção.", icon=None)
 
+            st.markdown("<br>", unsafe_allow_html=True)
+
+            # ── Linha final adaptativa: custos ou ações rápidas ─────────────────────
+            if not df_custos.empty:
+                col_custos, col_acoes = st.columns([1.35, 1])
+
+                with col_custos:
+                    with st.container(border=True):
+                        st.markdown("### Maiores Custos por Veículo")
+                        st.caption("Veículos com maior impacto financeiro.")
+
+                        df_gastos = (
+                            df_custos.groupby(["veiculo_id", "placa", "modelo"], dropna=False)["valor_total"]
+                            .sum()
+                            .reset_index()
+                            .sort_values("valor_total", ascending=False)
+                            .head(5)
+                        )
+
+                        if not df_gastos.empty:
+                            df_gastos["veiculo"] = (
+                                df_gastos["placa"].fillna("Sem placa").astype(str)
+                                + " · "
+                                + df_gastos["modelo"].fillna("").astype(str)
+                            )
+
+                            fig_gastos = px.bar(
+                                df_gastos.sort_values("valor_total"),
+                                x="valor_total",
+                                y="veiculo",
+                                orientation="h",
+                                text="valor_total",
+                                color_discrete_sequence=[PALETTE["indigo"]]
+                            )
+                            fig_gastos.update_traces(texttemplate="R$ %{text:,.0f}", textposition="outside")
+                            fig_gastos.update_layout(
+                                **PLOTLY_LAYOUT,
+                                height=245,
+                                xaxis=dict(title="", visible=False),
+                                yaxis=dict(title="")
+                            )
+                            st.plotly_chart(fig_gastos, use_container_width=True, config={"displayModeBar": False})
+
+                with col_acoes:
+                    with st.container(border=True):
+                        st.markdown("### Ações Rápidas")
+                        st.caption("Atalhos para as rotinas mais frequentes.")
+
+                        st.button(
+                            "Registrar despesa",
+                            icon=":material/add_card:",
+                            use_container_width=True,
+                            on_click=set_menu,
+                            args=("Gestão de Custos",),
+                            key="dash_acao_custos"
+                        )
+                        st.button(
+                            "Abrir contrato",
+                            icon=":material/description:",
+                            use_container_width=True,
+                            on_click=set_menu,
+                            args=("Contratos e Locação",),
+                            key="dash_acao_contratos"
+                        )
+                        st.button(
+                            "Gerenciar frota",
+                            icon=":material/directions_car:",
+                            use_container_width=True,
+                            on_click=set_menu,
+                            args=("Gestão de Frota",),
+                            key="dash_acao_frota"
+                        )
+            else:
+                col_resumo, col_acoes = st.columns([1.35, 1])
+
+                with col_resumo:
+                    with st.container(border=True):
+                        st.markdown("### Resumo Operacional")
+                        st.caption("Situação atual da operação em um único bloco.")
+
+                        ro1, ro2, ro3 = st.columns(3)
+                        ro1.metric("Disponíveis", veiculos_disponiveis)
+                        ro2.metric("Contratos ativos", contratos_ativos)
+                        ro3.metric("Reservas em uso", reservas_em_uso)
+
+                        st.info(
+                            "Nenhuma despesa registrada. O ranking de custos aparecerá aqui após os primeiros lançamentos.",
+                            icon=None
+                        )
+
+                with col_acoes:
+                    with st.container(border=True):
+                        st.markdown("### Ações Rápidas")
+                        st.caption("Comece pelas operações que alimentam o painel.")
+
+                        st.button(
+                            "Registrar primeira despesa",
+                            icon=":material/add_card:",
+                            use_container_width=True,
+                            on_click=set_menu,
+                            args=("Gestão de Custos",),
+                            key="dash_acao_primeiro_custo"
+                        )
+                        st.button(
+                            "Abrir contrato",
+                            icon=":material/description:",
+                            use_container_width=True,
+                            on_click=set_menu,
+                            args=("Contratos e Locação",),
+                            key="dash_acao_primeiro_contrato"
+                        )
+                        st.button(
+                            "Gerenciar frota",
+                            icon=":material/directions_car:",
+                            use_container_width=True,
+                            on_click=set_menu,
+                            args=("Gestão de Frota",),
+                            key="dash_acao_gerenciar_frota"
+
+                        )
 
         elif tela_ativa == "Gestão de Frota":
             page_header("Gestão de Frota", "Cadastro, saúde e análise de gastos por veículo.")
