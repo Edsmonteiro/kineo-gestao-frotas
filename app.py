@@ -73,21 +73,16 @@ a.header-anchor {{
 }}
 
 .block-container {{
-    /* Mantém o ponto de início original à esquerda e aproveita somente a área livre à direita */
-    width: calc(100% - 2.5rem) !important;
-    max-width: none !important;
-    margin-left: 0 !important;
-    margin-right: 0 !important;
+    /*
+       Mantém exatamente o recuo esquerdo que o layout original de 1280px
+       teria quando centralizado e usa somente o espaço livre à direita.
+    */
     padding: 2rem 2.5rem 2rem !important;
+    max-width: none !important;
+    width: auto !important;
+    margin-left: max(0px, calc((100% - 1280px) / 2)) !important;
+    margin-right: 0 !important;
     box-sizing: border-box !important;
-}}
-
-@media (max-width: 1200px) {{
-    .block-container {{
-        width: 100% !important;
-        padding-left: 2.5rem !important;
-        padding-right: 1.25rem !important;
-    }}
 }}
 
 [data-testid="stSidebarCollapseButton"] {{ 
