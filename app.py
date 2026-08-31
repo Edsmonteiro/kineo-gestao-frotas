@@ -97,32 +97,42 @@ a.header-anchor {{
     z-index: 999999 !important;
 }}
 
-[data-testid="stAppViewContainer"] > section.main {{
-    padding-left: {SIDEBAR_WIDTH} !important;
-    width: 100% !important;
-    max-width: none !important;
-    box-sizing: border-box !important;
-    transition: padding-left 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
+/*
+   ═══════════════════════════════════════════════════════════════════
+   LAYOUT PRINCIPAL RESPONSIVO À SIDEBAR
+   A sidebar é fixa. Portanto a área principal precisa ocupar apenas
+   o espaço que começa DEPOIS da borda direita da sidebar.
+   ═══════════════════════════════════════════════════════════════════
+*/
+
+[data-testid="stAppViewContainer"] {{
+    --kineo-sidebar-space: {SIDEBAR_WIDTH};
 }}
 
 /*
-   Sidebar recolhida: 82px.
-   Sidebar fixada: 260px via SIDEBAR_WIDTH.
-   Em hover, a sidebar abre para 260px e o conteúdo acompanha.
+   Compatibilidade com diferentes versões/estruturas do Streamlit.
+   O mesmo comportamento é aplicado ao container principal encontrado.
 */
-[data-testid="stAppViewContainer"]:has([data-testid="stSidebar"]:hover) > section.main {{
-    padding-left: 260px !important;
+[data-testid="stAppViewContainer"] > section.main,
+[data-testid="stAppViewContainer"] > .main,
+[data-testid="stMain"] {{
+    margin-left: var(--kineo-sidebar-space) !important;
+    width: calc(100% - var(--kineo-sidebar-space)) !important;
+    max-width: none !important;
+    padding-left: 0 !important;
+    box-sizing: border-box !important;
+    transition:
+        margin-left 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+        width 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
 }}
 
-body:has([data-testid="stSidebar"]:hover) [data-testid="stAppViewContainer"] > section.main {{
-    padding-left: 260px !important;
-}}
-
-@media (max-width: 1100px) {{
-    .block-container {{
-        padding-left: 1.5rem !important;
-        padding-right: 1.5rem !important;
-    }}
+/*
+   Quando a sidebar recolhida recebe hover, ela cresce para 260px.
+   A variável abaixo faz a área principal acompanhar exatamente
+   a mesma abertura, sem sobreposição.
+*/
+body:has([data-testid="stSidebar"]:hover) [data-testid="stAppViewContainer"] {{
+    --kineo-sidebar-space: 260px;
 }}
 
 /* Força a barra lateral a colar no topo, removendo o gap nativo do Streamlit */
