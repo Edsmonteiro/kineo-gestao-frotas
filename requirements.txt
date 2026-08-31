@@ -4,3 +4,4 @@ plotly
 sqlalchemy
 bcrypt
 psycopg2-binary
+openpyxl
