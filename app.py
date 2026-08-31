@@ -992,97 +992,168 @@ else:
 
             # ── Aba: Cadastro ─────────────────────────────────────────────────────
             with tab_admin:
-                with st.container(border=True):
-                    st.markdown("**Adicionar Novo Veículo**")
-                    status_novo = st.selectbox("Status inicial", ["Disponível", "Alugado", "Manutenção"])
-                    
-                    with st.container():
-                        ca, cb = st.columns(2)
-                        placa  = ca.text_input("Placa", placeholder="ABC-1234")
-                        modelo = cb.text_input("Modelo", placeholder="Ex: Fiat Cronos")
-                        km     = st.number_input("KM atual", min_value=0.0, step=100.0, value=0.0)
+                col_cad_tipo1, col_cad_tipo2 = st.tabs(["Cadastro Individual", "Importação em Massa (.xls / .xlsx)"])
 
-                        d_inicio = km_ini = d_fim = km_fim = cliente = cnpj_v = tipo_v = None
-                        valor_m = multa_c = juros_c = 0.0
-                        is_ativo = False
+                with col_cad_tipo1:
+                    with st.container(border=True):
+                        st.markdown("**Adicionar Novo Veículo**")
+                        status_novo = st.selectbox("Status inicial", ["Disponível", "Alugado", "Manutenção"])
                         
-                        if status_novo == "Alugado":
-                            st.markdown("---")
-                            st.markdown("**Dados do contrato**")
-                            c1, c2 = st.columns(2)
-                            cliente  = c1.text_input("Razão Social do Cliente")
-                            cnpj_v   = c2.text_input("CNPJ")
-                            
-                            c3, c4   = st.columns(2)
-                            d_inicio = c3.date_input("Início do contrato", format="DD/MM/YYYY")
-                            km_ini   = c4.number_input("KM na entrega", min_value=0.0, step=50.0, value=0.0)
-                            
-                            st.markdown("**Dados Financeiros do Contrato**")
-                            cf1, cf2 = st.columns(2)
-                            tipo_v = cf1.selectbox("Tipo de Cobrança", ["Fixo", "Variável"], key="frota_tipo")
-                            valor_m = cf2.number_input("Valor Mensal (R$)", min_value=0.0, step=100.0, value=0.0, disabled=(tipo_v == "Variável"), key="frota_val")
-                            
-                            cf3, cf4 = st.columns(2)
-                            multa_c = cf3.number_input("Multa por Atraso (%)", min_value=0.0, step=1.0, value=2.0, key="frota_mul")
-                            juros_c = cf4.number_input("Juros ao Mês (%)", min_value=0.0, step=0.1, value=1.0, key="frota_jur")
+                        with st.container():
+                            ca, cb = st.columns(2)
+                            placa  = ca.text_input("Placa", placeholder="ABC-1234")
+                            modelo = cb.text_input("Modelo", placeholder="Ex: Fiat Cronos")
+                            km     = st.number_input("KM atual", min_value=0.0, step=100.0, value=0.0)
 
-                            st.markdown("<br>", unsafe_allow_html=True)
-                            is_ativo = st.checkbox("Contrato em andamento", value=True)
+                            d_inicio = km_ini = d_fim = km_fim = cliente = cnpj_v = tipo_v = None
+                            valor_m = multa_c = juros_c = 0.0
+                            is_ativo = False
                             
-                            if not is_ativo:
-                                c5, c6 = st.columns(2)
-                                d_fim  = c5.date_input("Data de devolução", format="DD/MM/YYYY")
-                                km_fim = c6.number_input("KM na devolução", min_value=0.0, step=50.0, value=0.0)
-
-                        if st.button("Salvar Veículo", use_container_width=True):
-                            if not placa or not modelo:
-                                st.error("Placa e Modelo são obrigatórios.", icon=None)
-                            else:
-                                km_val = km or 0.0
-                                session = SessionLocal()
-                                erro = False
+                            if status_novo == "Alugado":
+                                st.markdown("---")
+                                st.markdown("**Dados do contrato**")
+                                c1, c2 = st.columns(2)
+                                cliente  = c1.text_input("Razão Social do Cliente")
+                                cnpj_v   = c2.text_input("CNPJ")
                                 
-                                if status_novo == "Alugado" and not is_ativo:
-                                    km_ini_v = km_ini or 0.0
-                                    km_fim_v = km_fim or 0.0
-                                    if d_fim < d_inicio or km_fim_v < km_ini_v:
-                                        st.error("Datas ou KMs inválidos.", icon=None)
-                                        erro = True
-                                        
-                                if not erro:
-                                    nv = Veiculo(
-                                        empresa_id=emp_id, 
-                                        placa=placa.upper(), 
-                                        modelo=modelo, 
-                                        km_atual=km_val, 
-                                        status=status_novo
-                                    )
-                                    session.add(nv)
-                                    session.flush()
+                                c3, c4   = st.columns(2)
+                                d_inicio = c3.date_input("Início do contrato", format="DD/MM/YYYY")
+                                km_ini   = c4.number_input("KM na entrega", min_value=0.0, step=50.0, value=0.0)
+                                
+                                st.markdown("**Dados Financeiros do Contrato**")
+                                cf1, cf2 = st.columns(2)
+                                tipo_v = cf1.selectbox("Tipo de Cobrança", ["Fixo", "Variável"], key="frota_tipo")
+                                valor_m = cf2.number_input("Valor Mensal (R$)", min_value=0.0, step=100.0, value=0.0, disabled=(tipo_v == "Variável"), key="frota_val")
+                                
+                                cf3, cf4 = st.columns(2)
+                                multa_c = cf3.number_input("Multa por Atraso (%)", min_value=0.0, step=1.0, value=2.0, key="frota_mul")
+                                juros_c = cf4.number_input("Juros ao Mês (%)", min_value=0.0, step=0.1, value=1.0, key="frota_jur")
+
+                                st.markdown("<br>", unsafe_allow_html=True)
+                                is_ativo = st.checkbox("Contrato em andamento", value=True)
+                                
+                                if not is_ativo:
+                                    c5, c6 = st.columns(2)
+                                    d_fim  = c5.date_input("Data de devolução", format="DD/MM/YYYY")
+                                    km_fim = c6.number_input("KM na devolução", min_value=0.0, step=50.0, value=0.0)
+
+                            if st.button("Salvar Veículo", use_container_width=True):
+                                if not placa or not modelo:
+                                    st.error("Placa e Modelo são obrigatórios.", icon=None)
+                                else:
+                                    km_val = km or 0.0
+                                    session = SessionLocal()
+                                    erro = False
                                     
-                                    if status_novo == "Alugado":
-                                        session.add(Contrato(
+                                    if status_novo == "Alugado" and not is_ativo:
+                                        km_ini_v = km_ini or 0.0
+                                        km_fim_v = km_fim or 0.0
+                                        if d_fim < d_inicio or km_fim_v < km_ini_v:
+                                            st.error("Datas ou KMs inválidos.", icon=None)
+                                            erro = True
+                                            
+                                    if not erro:
+                                        nv = Veiculo(
                                             empresa_id=emp_id, 
-                                            veiculo_id=nv.id,
-                                            cliente=cliente, 
-                                            cnpj=cnpj_v,
-                                            data_inicio=d_inicio, 
-                                            data_fim=d_fim,
-                                            km_inicial=km_ini or 0.0, 
-                                            km_final=km_fim or 0.0,
-                                            ativo=1 if is_ativo else 0,
-                                            usuario_lancamento=st.session_state["nome"],
-                                            tipo_valor=tipo_v, 
-                                            valor_mensal=valor_m if tipo_v == "Fixo" else 0.0,
-                                            multa=multa_c, 
-                                            juros=juros_c
-                                        ))
+                                            placa=placa.upper(), 
+                                            modelo=modelo, 
+                                            km_atual=km_val, 
+                                            status=status_novo
+                                        )
+                                        session.add(nv)
+                                        session.flush()
                                         
-                                    session.commit()
-                                    session.close()
-                                    st.success(f"Veículo cadastrado com sucesso.")
-                                    time.sleep(0.8)
-                                    st.rerun()
+                                        if status_novo == "Alugado":
+                                            session.add(Contrato(
+                                                empresa_id=emp_id, 
+                                                veiculo_id=nv.id,
+                                                cliente=cliente, 
+                                                cnpj=cnpj_v,
+                                                data_inicio=d_inicio, 
+                                                data_fim=d_fim,
+                                                km_inicial=km_ini or 0.0, 
+                                                km_final=km_fim or 0.0,
+                                                ativo=1 if is_ativo else 0,
+                                                usuario_lancamento=st.session_state["nome"],
+                                                tipo_valor=tipo_v, 
+                                                valor_mensal=valor_m if tipo_v == "Fixo" else 0.0,
+                                                multa=multa_c, 
+                                                juros=juros_c
+                                            ))
+                                            
+                                        session.commit()
+                                        session.close()
+                                        st.success(f"Veículo cadastrado com sucesso.")
+                                        time.sleep(0.8)
+                                        st.rerun()
+
+                # ── Aba de Importação em Massa (.xls / .xlsx) ────────────────────────
+                with col_cad_tipo2:
+                    with st.container(border=True):
+                        st.markdown("**Importação em Massa de Veículos Disponíveis**")
+                        st.caption("Envie uma planilha contendo as colunas: **placa**, **modelo** e **km** (opcional). Os veículos serão cadastrados automaticamente com o status **Disponível**.")
+
+                        arquivo_xls = st.file_uploader("Selecione o arquivo Excel (.xls ou .xlsx)", type=["xls", "xlsx"])
+
+                        if arquivo_xls:
+                            try:
+                                df_import = pd.read_excel(arquivo_xls)
+                                # Normaliza colunas para minúsculas e remove espaços
+                                df_import.columns = [str(c).strip().lower() for c in df_import.columns]
+
+                                colunas_necessarias = ["placa", "modelo"]
+                                if not all(col in df_import.columns for col in colunas_necessarias):
+                                    st.error("O arquivo Excel precisa conter obrigatoriamente as colunas 'placa' e 'modelo'.", icon=None)
+                                else:
+                                    st.markdown("---")
+                                    st.markdown("**Pré-visualização dos dados carregados:**")
+                                    st.dataframe(df_import.head(), use_container_width=True)
+
+                                    if st.button("Confirmar Importação de Veículos", use_container_width=True):
+                                        session = SessionLocal()
+                                        sucessos = 0
+                                        erros = 0
+
+                                        for _, row in df_import.iterrows():
+                                            p_val = str(row["placa"]).strip().upper()
+                                            m_val = str(row["modelo"]).strip()
+
+                                            if not p_val or p_val == "NAN" or not m_val or m_val == "NAN":
+                                                erros += 1
+                                                continue
+
+                                            # Trata o KM: se não houver ou for nulo/inválido, considera 0.0
+                                            km_val = 0.0
+                                            if "km" in df_import.columns:
+                                                try:
+                                                    val_k = row["km"]
+                                                    if pd.notna(val_k):
+                                                        km_val = float(val_k)
+                                                except:
+                                                    km_val = 0.0
+
+                                            # Verifica se a placa já existe para esta empresa
+                                            existe_placa = session.query(Veiculo).filter_by(empresa_id=emp_id, placa=p_val).first()
+                                            if not existe_placa:
+                                                novo_v = Veiculo(
+                                                    empresa_id=emp_id,
+                                                    placa=p_val,
+                                                    modelo=m_val,
+                                                    km_atual=km_val,
+                                                    status="Disponível"
+                                                )
+                                                session.add(novo_v)
+                                                sucessos += 1
+
+                                        session.commit()
+                                        session.close()
+
+                                        st.success(f"Importação concluída! {sucessos} veículo(s) cadastrado(s) com sucesso. ({erros} linha(s) ignoradas por dados incompletos).")
+                                        time.sleep(1.5)
+                                        st.rerun()
+
+                            except Exception as e:
+                                st.error(f"Erro ao ler o arquivo Excel: {e}", icon=None)
 
                 if st.session_state["perfil"] == "admin" and total > 0:
                     with st.expander("Excluir veículo — Zona restrita"):
