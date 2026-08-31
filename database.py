@@ -1,111 +1,150 @@
+import os
+import streamlit as st
 from sqlalchemy import create_engine, Column, Integer, String, Float, Date
-from sqlalchemy.orm import declarative_base, sessionmaker
+from sqlalchemy.orm import sessionmaker, declarative_base
 import bcrypt
 
-engine = create_engine('sqlite:///frota.db', connect_args={'check_same_thread': False})
-SessionLocal = sessionmaker(bind=engine)
+# ─── CONEXÃO COM BANCO DE DADOS ──────────────────────────────────────────────
+DATABASE_URL = None
+
+# Tenta buscar a URL do Neon nas Secrets de forma segura (evita crash se o arquivo não existir)
+try:
+    if hasattr(st, "secrets") and "DATABASE_URL" in st.secrets:
+        DATABASE_URL = st.secrets["DATABASE_URL"]
+except Exception:
+    pass
+
+# Se não achou na Secret, tenta nas variáveis de ambiente do sistema
+if not DATABASE_URL and "DATABASE_URL" in os.environ:
+    DATABASE_URL = os.environ["DATABASE_URL"]
+
+# Fallback local se não encontrar URL da nuvem
+if not DATABASE_URL:
+    DATABASE_URL = "sqlite:///frota.db"
+
+# Ajuste do prefixo para compatibilidade com SQLAlchemy caso venha como postgres://
+if DATABASE_URL.startswith("postgres://"):
+    DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
+
+# Criação do Engine
+if DATABASE_URL.startswith("sqlite"):
+    engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
+else:
+    engine = create_engine(DATABASE_URL, pool_pre_ping=True)
+
+SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 
+# ─── MODELOS DE DADOS ────────────────────────────────────────────────────────
 class Empresa(Base):
-    __tablename__ = 'empresas'
-    id = Column(Integer, primary_key=True)
-    nome_fantasia = Column(String)
-    cnpj = Column(String)
+    __tablename__ = "empresas"
+    id = Column(Integer, primary_key=True, index=True)
+    nome_fantasia = Column(String, default="Kineo")
     logo_path = Column(String, nullable=True)
 
 class Usuario(Base):
-    __tablename__ = 'usuarios'
-    id = Column(Integer, primary_key=True)
-    empresa_id = Column(Integer)
-    nome = Column(String)
-    login = Column(String, unique=True)
-    senha = Column(String)
-    perfil = Column(String)
+    __tablename__ = "usuarios"
+    id = Column(Integer, primary_key=True, index=True)
+    empresa_id = Column(Integer, default=1)
+    nome = Column(String, nullable=False)
+    login = Column(String, unique=True, nullable=False)
+    senha = Column(String, nullable=False)
+    perfil = Column(String, default="operador")
 
 class Veiculo(Base):
-    __tablename__ = 'veiculos'
-    id = Column(Integer, primary_key=True)
-    empresa_id = Column(Integer)
-    placa = Column(String)
-    modelo = Column(String)
-    km_atual = Column(Float)
-    status = Column(String)
+    __tablename__ = "veiculos"
+    id = Column(Integer, primary_key=True, index=True)
+    empresa_id = Column(Integer, default=1)
+    placa = Column(String, unique=True, nullable=False)
+    modelo = Column(String, nullable=False)
+    km_atual = Column(Float, default=0.0)
+    status = Column(String, default="Disponível")
 
 class Contrato(Base):
-    __tablename__ = 'contratos'
-    id = Column(Integer, primary_key=True)
-    empresa_id = Column(Integer)
-    veiculo_id = Column(Integer)
-    cliente = Column(String)
-    cnpj = Column(String)
-    data_inicio = Column(Date)
+    __tablename__ = "contratos"
+    id = Column(Integer, primary_key=True, index=True)
+    empresa_id = Column(Integer, default=1)
+    veiculo_id = Column(Integer, nullable=False)
+    cliente = Column(String, nullable=False)
+    cnpj = Column(String, nullable=True)
+    data_inicio = Column(Date, nullable=False)
     data_fim = Column(Date, nullable=True)
-    km_inicial = Column(Float)
-    km_final = Column(Float, nullable=True)
-    ativo = Column(Integer)
-    usuario_lancamento = Column(String)
-    # --- NOVOS CAMPOS FINANCEIROS DO CONTRATO ---
-    tipo_valor = Column(String) # 'Fixo' ou 'Variável'
-    valor_mensal = Column(Float, nullable=True)
-    multa = Column(Float, nullable=True)
-    juros = Column(Float, nullable=True)
+    km_inicial = Column(Float, default=0.0)
+    km_final = Column(Float, default=0.0)
+    ativo = Column(Integer, default=1)
+    usuario_lancamento = Column(String, nullable=True)
+    tipo_valor = Column(String, default="Fixo")
+    valor_mensal = Column(Float, default=0.0)
+    multa = Column(Float, default=2.0)
+    juros = Column(Float, default=1.0)
 
 class Custo(Base):
-    __tablename__ = 'custos'
-    id = Column(Integer, primary_key=True)
-    empresa_id = Column(Integer)
-    veiculo_id = Column(Integer)
-    data_custo = Column(Date)
-    categoria = Column(String)
-    descricao = Column(String)
-    valor_total = Column(Float)
-    km_momento = Column(Float)
+    __tablename__ = "custos"
+    id = Column(Integer, primary_key=True, index=True)
+    empresa_id = Column(Integer, default=1)
+    veiculo_id = Column(Integer, nullable=False)
+    data_custo = Column(Date, nullable=False)
+    categoria = Column(String, nullable=False)
+    descricao = Column(String, nullable=True)
+    valor_total = Column(Float, nullable=False)
+    km_momento = Column(Float, default=0.0)
     litros = Column(Float, nullable=True)
-    usuario_lancamento = Column(String)
+    usuario_lancamento = Column(String, nullable=True)
+    forma_pagamento = Column(String, default="Pix")
+    condicao_pagamento = Column(String, default="À vista")
+    parcelas = Column(Integer, default=1)
     motorista = Column(String, nullable=True)
     comprovante = Column(String, nullable=True)
-    forma_pagamento = Column(String)
-    condicao_pagamento = Column(String, nullable=True)
-    parcelas = Column(Integer, nullable=True)
 
 class CobrancaRecorrente(Base):
-    __tablename__ = 'cobrancas_recorrentes'
-    id = Column(Integer, primary_key=True)
-    empresa_id = Column(Integer)
-    cliente = Column(String)
-    forma_cobranca = Column(String)
-    valor_mensal = Column(String)
-    data_base_emissao = Column(Date)
-    data_base_vencimento = Column(Date)
-    observacoes = Column(String)
+    __tablename__ = "cobrancas_recorrentes"
+    id = Column(Integer, primary_key=True, index=True)
+    empresa_id = Column(Integer, default=1)
+    cliente = Column(String, nullable=False)
+    forma_cobranca = Column(String, nullable=False)
+    valor_mensal = Column(String, nullable=False)
+    data_base_emissao = Column(Date, nullable=False)
+    data_base_vencimento = Column(Date, nullable=False)
+    observacoes = Column(String, nullable=True)
 
 class CobrancaMensal(Base):
-    __tablename__ = 'cobrancas_mensais'
-    id = Column(Integer, primary_key=True)
-    empresa_id = Column(Integer)
-    mes_ano = Column(String)
-    tipo = Column(String)
-    cliente = Column(String)
-    forma_cobranca = Column(String)
-    valor_previsto = Column(Float, nullable=True)
-    emissao_prevista = Column(Date)
-    vencimento = Column(Date)
+    __tablename__ = "cobrancas_mensais"
+    id = Column(Integer, primary_key=True, index=True)
+    empresa_id = Column(Integer, default=1)
+    mes_ano = Column(String, nullable=False)
+    tipo = Column(String, default="Recorrente")
+    cliente = Column(String, nullable=False)
+    forma_cobranca = Column(String, nullable=False)
+    valor_previsto = Column(Float, default=0.0)
+    emissao_prevista = Column(Date, nullable=True)
+    vencimento = Column(Date, nullable=True)
+    status = Column(String, default="Pendente")
     data_emissao = Column(Date, nullable=True)
     num_boleto = Column(String, nullable=True)
-    status = Column(String)
     data_recebimento = Column(Date, nullable=True)
     observacoes = Column(String, nullable=True)
 
-Base.metadata.create_all(engine)
+# ─── INICIALIZAÇÃO DO BANCO ──────────────────────────────────────────────────
+Base.metadata.create_all(bind=engine)
 
-session = SessionLocal()
-if not session.query(Empresa).first():
-    nova_empresa = Empresa(nome_fantasia="LOC+ Rent a Car", cnpj="00.000.000/0001-00")
-    session.add(nova_empresa)
-    session.commit()
-    
-    senha_hash = bcrypt.hashpw("PRIMEIROACESSO".encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
-    admin_padrao = Usuario(empresa_id=nova_empresa.id, nome="Administrador", login="admin", senha=senha_hash, perfil="admin")
-    session.add(admin_padrao)
-    session.commit()
-session.close()
+def inicializar_dados():
+    session = SessionLocal()
+    # Cria a primeira empresa caso não exista
+    if not session.query(Empresa).first():
+        session.add(Empresa(id=1, nome_fantasia="Kineo", logo_path=None))
+        session.commit()
+
+    # Cria o usuário admin inicial caso não exista
+    if not session.query(Usuario).first():
+        senha_hash = bcrypt.hashpw(b"PRIMEIROACESSO", bcrypt.gensalt()).decode()
+        session.add(Usuario(
+            empresa_id=1,
+            nome="Administrador",
+            login="admin",
+            senha=senha_hash,
+            perfil="admin"
+        ))
+        session.commit()
+    session.close()
+
+inicializar_dados()
