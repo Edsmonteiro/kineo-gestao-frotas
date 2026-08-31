@@ -1592,34 +1592,75 @@ else:
                 if st.session_state["perfil"] == "admin":
                     with st.expander("Excluir registro financeiro"):
                         df_ex = carregar_dados_tabela(f"""
-                            SELECT c.id, c.data_custo, v.placa, c.categoria, c.valor_total 
-                            FROM custos c JOIN veiculos v ON c.veiculo_id=v.id 
-                            WHERE c.empresa_id={emp_id} ORDER BY c.data_custo DESC
+                            SELECT c.id, c.data_custo, v.placa, c.categoria, c.valor_total
+                            FROM custos c
+                            JOIN veiculos v ON c.veiculo_id = v.id
+                            WHERE c.empresa_id = {emp_id}
+                            ORDER BY c.data_custo DESC
                         """, emp_id)
-                        
+
                         if not df_ex.empty:
-                            opcoes_c = {f"{pd.to_datetime(r['data_custo']).strftime('%d/%m/%Y')} · {r['placa']} · {r['categoria']} ({fmt_brl(r['valor_total'])})": r["id"] for _, r in df_ex.iterrows()}
+                            opcoes_c = {
+                                f"{pd.to_datetime(r['data_custo']).strftime('%d/%m/%Y')} · {r['placa']} · {r['categoria']} ({fmt_brl(float(r['valor_total'] or 0))})": r["id"]
+                                for _, r in df_ex.iterrows()
+                            }
                             custo_exc = st.selectbox("Selecione o lançamento", list(opcoes_c.keys()))
-                            
-                            if st.button("Excluir definitivamente", use_container_width=True):
+
+                            if st.button("Excluir definitivamente", use_container_width=True, key="btn_excluir_custo"):
                                 session = SessionLocal()
-                                session.query(Custo).filter(Custo.id == opcoes_c[custo_exc]).delete()
-                                session.commit()
-                                session.close()
-                                st.rerun()
+                                try:
+                                    custo_id = opcoes_c[custo_exc]
+                                    custo = session.get(Custo, custo_id)
+                                    if custo is None:
+                                        st.warning("O lançamento selecionado não foi encontrado.", icon=None)
+                                    else:
+                                        session.delete(custo)
+                                        session.commit()
+                                        st.cache_data.clear()
+                                        st.success("Registro financeiro excluído com sucesso.")
+                                        time.sleep(0.5)
+                                        st.rerun()
+                                except Exception:
+                                    session.rollback()
+                                    st.error("Não foi possível excluir o registro financeiro.", icon=None)
+                                finally:
+                                    session.close()
+                        else:
+                            st.info("Nenhum registro financeiro disponível para exclusão.", icon=None)
 
                 # Tabela de custos
                 df_custos = carregar_dados_tabela(f"""
-                    SELECT c.id, c.data_custo as Data, v.placa as Placa, c.categoria as Categoria,
-                           c.descricao as Descrição, c.valor_total as Valor,
-                           c.forma_pagamento, c.condicao_pagamento, c.parcelas,
-                           c.motorista as Motorista, c.comprovante
-                    FROM custos c JOIN veiculos v ON c.veiculo_id=v.id
-                    WHERE c.empresa_id={emp_id} ORDER BY c.data_custo DESC
+                    SELECT
+                        c.id,
+                        c.data_custo,
+                        v.placa,
+                        c.categoria,
+                        c.descricao,
+                        c.valor_total,
+                        c.forma_pagamento,
+                        c.condicao_pagamento,
+                        c.parcelas,
+                        c.motorista,
+                        c.comprovante
+                    FROM custos c
+                    JOIN veiculos v ON c.veiculo_id = v.id
+                    WHERE c.empresa_id = {emp_id}
+                    ORDER BY c.data_custo DESC
                 """, emp_id)
 
                 if not df_custos.empty:
-                    df_custos["Data"] = pd.to_datetime(df_custos["Data"]).dt.strftime("%d/%m/%Y")
+                    df_custos = df_custos.rename(columns={
+                        "data_custo": "Data",
+                        "placa": "Placa",
+                        "categoria": "Categoria",
+                        "descricao": "Descrição",
+                        "valor_total": "Valor",
+                        "motorista": "Motorista",
+                    })
+
+                    df_custos["Data"] = pd.to_datetime(
+                        df_custos["Data"], errors="coerce"
+                    ).dt.strftime("%d/%m/%Y")
                     df_custos["Pagamento"] = df_custos.apply(
                         lambda r: f"{r['forma_pagamento']} · {int(r['parcelas'])}x" 
                         if r["forma_pagamento"] == "Cartão de Crédito" and r["condicao_pagamento"] == "Parcelado" 
