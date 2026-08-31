@@ -682,7 +682,7 @@ elif st.session_state["forcar_troca_senha"]:
                         st.error("As senhas informadas não coincidem.")
                     else:
                         session = SessionLocal()
-                        user = session.query(Usuario).get(st.session_state["usuario_id"])
+                        user = session.get(Usuario, st.session_state["usuario_id"])
                         user.senha = bcrypt.hashpw(nova.encode(), bcrypt.gensalt()).decode()
                         session.commit()
                         session.close()
@@ -705,7 +705,7 @@ else:
     # ── Sidebar ──────────────────────────────────────────────────────────────
     with st.sidebar:
         session_logo = SessionLocal()
-        empresa_atual = session_logo.query(Empresa).get(emp_id)
+        empresa_atual = session_logo.get(Empresa, emp_id)
         session_logo.close()
 
         # Renderização Logo Dinâmica
@@ -1153,9 +1153,9 @@ else:
                         
                         if ordem == "Maior gasto":   
                             df_merged = df_merged.sort_values("valor_total", ascending=False)
-                        elif ordem == "Menor gasto": 
+                        elif ordem == "Menor gasto":  
                             df_merged = df_merged.sort_values("valor_total")
-                        else:                          
+                        else:                        
                             df_merged = df_merged.sort_values("modelo")
 
                         lista_v = [f"{r['modelo']} ({r['placa']})" for _, r in df_merged.iterrows()]
@@ -1251,12 +1251,12 @@ else:
                         status_s  = "URGENTE" if km_rev >= 9500 else ("ATENÇÃO" if km_rev >= 8000 else "OK")
 
                         saude.append({
-                            "Placa":          v["placa"],
+                            "Placa":        v["placa"],
                             "Modelo":         v["modelo"],
-                            "KM Atual":       int(v["km_atual"]),
-                            "KM s/ revisão":  int(km_rev),
-                            "Saúde":          status_s,
-                            "Média KM/mês":   int(km_mes),
+                            "KM Atual":        int(v["km_atual"]),
+                            "KM s/ revisão":   int(km_rev),
+                            "Saúde":         status_s,
+                            "Média KM/mês":    int(km_mes),
                             "Manutenção (R$)": round(gasto_manut, 2),
                             "Combustível (R$)": round(gasto_comb, 2),
                         })
@@ -1305,7 +1305,7 @@ else:
                     km_atual    = cc.number_input("KM no momento", min_value=0.0, step=50.0, value=0.0)
 
                     cd, ce, cf = st.columns(3)
-                    valor     = cd.number_input("Valor total (R$)", min_value=0.01, step=10.0, value=0.01)
+                    valor      = cd.number_input("Valor total (R$)", min_value=0.01, step=10.0, value=0.01)
                     descricao = ce.text_input("Descrição do serviço/peça")
                     litros    = cf.number_input("Litros abastecidos", min_value=0.1, step=5.0, value=0.1) if cat == "Combustível" else None
 
@@ -1326,7 +1326,7 @@ else:
                     if st.button("Lançar Despesa no Sistema", use_container_width=True):
                         km_val = km_atual or 0.0
                         session = SessionLocal()
-                        v = session.query(Veiculo).get(opcoes_v[veiculo_sel])
+                        v = session.get(Veiculo, opcoes_v[veiculo_sel])
                         
                         if km_val > 0 and km_val < v.km_atual:
                             st.error(f"KM não pode ser menor que o atual ({int(v.km_atual)} km).", icon=None)
@@ -1521,7 +1521,7 @@ else:
                         for ed, _ in [(ed_rec, df_rec), (ed_pont, df_pont)]:
                             if ed is not None:
                                 for _, row in ed.iterrows():
-                                    cob = session.query(CobrancaMensal).get(row["id"])
+                                    cob = session.get(CobrancaMensal, row["id"])
                                     for campo in ["valor_previsto","data_emissao","num_boleto","status","data_recebimento","observacoes"]: 
                                         setattr(cob, campo, row[campo])
                         session.commit()
@@ -1760,7 +1760,7 @@ else:
                         
                         if b_col1.button("Assinar Aditivo (Salvar)", use_container_width=True):
                             session = SessionLocal()
-                            c = session.query(Contrato).get(ct_id)
+                            c = session.get(Contrato, ct_id)
                             c.cliente = e_cliente
                             c.cnpj = e_cnpj
                             c.data_inicio = e_dinicio
@@ -1823,7 +1823,7 @@ else:
                         
                         if st.form_submit_button("Atualizar Nome"):
                             session = SessionLocal()
-                            u = session.query(Usuario).get(st.session_state["usuario_id"])
+                            u = session.get(Usuario, st.session_state["usuario_id"])
                             u.nome = novo_nome
                             session.commit()
                             session.close()
@@ -1845,129 +1845,129 @@ else:
                                     st.error("As senhas não coincidem ou são curtas demais.", icon=None)
                                 else:
                                     session = SessionLocal()
-                                    u = session.query(Usuario).get(st.session_state["usuario_id"])
+                                    u = session.get(Usuario, st.session_state["usuario_id"])
                                     u.senha = bcrypt.hashpw(ns1.encode(), bcrypt.gensalt()).decode()
                                     session.commit()
                                     session.close()
                                     st.success("Senha alterada com sucesso!")
 
         # ══════════════════════════════════════════════════════════════════════════
-# CONFIGURAÇÕES (ADMIN)
-# ══════════════════════════════════════════════════════════════════════════
-elif tela_ativa == "Configurações":
-page_header("Configurações Globais", "Definições administrativas e de segurança do sistema.")
+        # CONFIGURAÇÕES (ADMIN)
+        # ══════════════════════════════════════════════════════════════════════════
+        elif tela_ativa == "Configurações":
+            page_header("Configurações Globais", "Definições administrativas e de segurança do sistema.")
 
-if st.session_state["perfil"] != "admin":
-        st.error("Acesso Negado: Privilégio administrativo requerido.", icon=None)
-    else:
-        tab_users, tab_logo = st.tabs(["Controle de Acessos", "Branding Institucional"])
+            if st.session_state["perfil"] != "admin":
+                st.error("Acesso Negado: Privilégio administrativo requerido.", icon=None)
+            else:
+                tab_users, tab_logo = st.tabs(["Controle de Acessos", "Branding Institucional"])
 
-        with tab_users:
-            df_users = pd.read_sql(f"SELECT id, nome, login, perfil FROM usuarios WHERE empresa_id={emp_id}", engine)
-            st.dataframe(df_users.rename(columns={"nome": "Nome", "login": "Login", "perfil": "Perfil"}).drop(columns=["id"]), use_container_width=True, hide_index=True)
+                with tab_users:
+                    df_users = pd.read_sql(f"SELECT id, nome, login, perfil FROM usuarios WHERE empresa_id={emp_id}", engine)
+                    st.dataframe(df_users.rename(columns={"nome": "Nome", "login": "Login", "perfil": "Perfil"}).drop(columns=["id"]), use_container_width=True, hide_index=True)
 
-            sub1, sub2, sub3 = st.tabs(["Nova Credencial", "Gestão de Credencial", "Reset de Fator"])
+                    sub1, sub2, sub3 = st.tabs(["Nova Credencial", "Gestão de Credencial", "Reset de Fator"])
 
-            with sub1:
-                with st.form("form_novo_user", clear_on_submit=True):
-                    ua, ub = st.columns(2)
-                    u_nome   = ua.text_input("Colaborador")
-                    u_login  = ub.text_input("Login Sistêmico")
-                    u_perfil = st.selectbox("Camada de Acesso", ["operador", "admin"])
-                    
-                    if st.form_submit_button("Aprovar Credencial", use_container_width=True):
-                        if not u_nome or not u_login: 
-                            st.error("Identificação incompleta.", icon=None)
-                        else:
+                    with sub1:
+                        with st.form("form_novo_user", clear_on_submit=True):
+                            ua, ub = st.columns(2)
+                            u_nome   = ua.text_input("Colaborador")
+                            u_login  = ub.text_input("Login Sistêmico")
+                            u_perfil = st.selectbox("Camada de Acesso", ["operador", "admin"])
+                            
+                            if st.form_submit_button("Aprovar Credencial", use_container_width=True):
+                                if not u_nome or not u_login: 
+                                    st.error("Identificação incompleta.", icon=None)
+                                else:
+                                    session = SessionLocal()
+                                    if session.query(Usuario).filter(Usuario.login == u_login).first(): 
+                                        st.error("Identificador de login em uso.", icon=None)
+                                    else:
+                                        h = bcrypt.hashpw(b"PRIMEIROACESSO", bcrypt.gensalt()).decode()
+                                        session.add(Usuario(empresa_id=emp_id, nome=u_nome, login=u_login, senha=h, perfil=u_perfil))
+                                        session.commit()
+                                        session.close()
+                                        st.success(f"Permissão concedida. Chave de entrada: PRIMEIROACESSO")
+                                        st.rerun()
+
+                    with sub2:
+                        opt_u = {f"{r['nome']} ({r['login']})": r["id"] for _, r in df_users.iterrows()}
+                        u_sel = st.selectbox("Alvo da modificação", list(opt_u.keys()))
+                        
+                        if u_sel:
+                            uid   = opt_u[u_sel]
+                            row_u = df_users[df_users["id"] == uid].iloc[0]
+                            e_nom = st.text_input("Nome",  value=row_u["nome"])
+                            e_log = st.text_input("Login", value=row_u["login"])
+                            e_prf = st.selectbox("Perfil", ["operador","admin"], index=0 if row_u["perfil"]=="operador" else 1)
+                            
+                            ba, bb = st.columns(2)
+                            if ba.button("Salvar Modificação", use_container_width=True):
+                                session = SessionLocal()
+                                if session.query(Usuario).filter(Usuario.login == e_log, Usuario.id != uid).first(): 
+                                    st.error("Conflito de logins na base.", icon=None)
+                                else:
+                                    u = session.get(Usuario, uid)
+                                    u.nome = e_nom
+                                    u.login = e_log
+                                    u.perfil = e_prf
+                                    session.commit()
+                                    session.close()
+                                    st.success("Atualizado!")
+                                    st.rerun()
+                                    
+                            if bb.button("Revogar Acesso (Excluir)", use_container_width=True):
+                                if uid == st.session_state["usuario_id"]: 
+                                    st.error("Tentativa de bloqueio sistêmico negada.", icon=None)
+                                else:
+                                    session = SessionLocal()
+                                    session.query(Usuario).filter(Usuario.id == uid).delete()
+                                    session.commit()
+                                    session.close()
+                                    st.success("Acesso revogado.")
+                                    st.rerun()
+
+                    with sub3:
+                        opt_r = {f"{r['nome']} ({r['login']})": r["id"] for _, r in df_users.iterrows()}
+                        u_rst = st.selectbox("Usuário Alvo", list(opt_r.keys()))
+                        
+                        if st.button("Forçar Chave Padrão", use_container_width=True):
                             session = SessionLocal()
-                            if session.query(Usuario).filter(Usuario.login == u_login).first(): 
-                                st.error("Identificador de login em uso.", icon=None)
-                            else:
-                                h = bcrypt.hashpw(b"PRIMEIROACESSO", bcrypt.gensalt()).decode()
-                                session.add(Usuario(empresa_id=emp_id, nome=u_nome, login=u_login, senha=h, perfil=u_perfil))
+                            u = session.get(Usuario, opt_r[u_rst])
+                            u.senha = bcrypt.hashpw(b"PRIMEIROACESSO", bcrypt.gensalt()).decode()
+                            session.commit()
+                            session.close()
+                            st.success(f"Fator de entrada restaurado para as configurações de fábrica.")
+
+                with tab_logo:
+                    with st.container(border=True):
+                        st.markdown("**Identidade Visual da Empresa**")
+                        st.caption("Atualize a Razão Social e o logotipo exibidos na interface.")
+                        
+                        with st.form("form_branding"):
+                            session_nome = SessionLocal()
+                            empresa_b = session_nome.get(Empresa, emp_id)
+                            nome_atual = empresa_b.nome_fantasia if empresa_b else "Kineo"
+                            session_nome.close()
+                            
+                            novo_nome = st.text_input("Razão Social / Nome de Exibição", value=nome_atual)
+                            logo_file = st.file_uploader("Logotipo (Vetor/Imagem)", type=["png","jpg","jpeg"])
+                            
+                            if st.form_submit_button("Atualizar Plataforma", use_container_width=True):
+                                session = SessionLocal()
+                                emp = session.get(Empresa, emp_id)
+                                emp.nome_fantasia = novo_nome
+                                
+                                if logo_file:
+                                    ext = logo_file.name.rsplit(".", 1)[-1]
+                                    path = os.path.join("logos", f"logo_{emp_id}.{ext}")
+                                    with open(path, "wb") as f: 
+                                        f.write(logo_file.getbuffer())
+                                    emp.logo_path = path
+                                    
                                 session.commit()
                                 session.close()
-                                st.success(f"Permissão concedida. Chave de entrada: PRIMEIROACESSO")
+                                
+                                st.success("Branding atualizado com sucesso!")
+                                time.sleep(0.5)
                                 st.rerun()
-
-            with sub2:
-                opt_u = {f"{r['nome']} ({r['login']})": r["id"] for _, r in df_users.iterrows()}
-                u_sel = st.selectbox("Alvo da modificação", list(opt_u.keys()))
-                
-                if u_sel:
-                    uid   = opt_u[u_sel]
-                    row_u = df_users[df_users["id"] == uid].iloc[0]
-                    e_nom = st.text_input("Nome",  value=row_u["nome"])
-                    e_log = st.text_input("Login", value=row_u["login"])
-                    e_prf = st.selectbox("Perfil", ["operador","admin"], index=0 if row_u["perfil"]=="operador" else 1)
-                    
-                    ba, bb = st.columns(2)
-                    if ba.button("Salvar Modificação", use_container_width=True):
-                        session = SessionLocal()
-                        if session.query(Usuario).filter(Usuario.login == e_log, Usuario.id != uid).first(): 
-                            st.error("Conflito de logins na base.", icon=None)
-                        else:
-                            u = session.get(Usuario, uid)
-                            u.nome = e_nom
-                            u.login = e_log
-                            u.perfil = e_prf
-                            session.commit()
-                            session.close()
-                            st.success("Atualizado!")
-                            st.rerun()
-                            
-                    if bb.button("Revogar Acesso (Excluir)", use_container_width=True):
-                        if uid == st.session_state["usuario_id"]: 
-                            st.error("Tentativa de bloqueio sistêmico negada.", icon=None)
-                        else:
-                            session = SessionLocal()
-                            session.query(Usuario).filter(Usuario.id == uid).delete()
-                            session.commit()
-                            session.close()
-                            st.success("Acesso revogado.")
-                            st.rerun()
-
-            with sub3:
-                opt_r = {f"{r['nome']} ({r['login']})": r["id"] for _, r in df_users.iterrows()}
-                u_rst = st.selectbox("Usuário Alvo", list(opt_r.keys()))
-                
-                if st.button("Forçar Chave Padrão", use_container_width=True):
-                    session = SessionLocal()
-                    u = session.get(Usuario, opt_r[u_rst])
-                    u.senha = bcrypt.hashpw(b"PRIMEIROACESSO", bcrypt.gensalt()).decode()
-                    session.commit()
-                    session.close()
-                    st.success(f"Fator de entrada restaurado para as configurações de fábrica.")
-
-        with tab_logo:
-            with st.container(border=True):
-                st.markdown("**Identidade Visual da Empresa**")
-                st.caption("Atualize a Razão Social e o logotipo exibidos na interface.")
-                
-                with st.form("form_branding"):
-                    session_nome = SessionLocal()
-                    empresa_b = session_nome.get(Empresa, emp_id)
-                    nome_atual = empresa_b.nome_fantasia if empresa_b else "Kineo"
-                    session_nome.close()
-                    
-                    novo_nome = st.text_input("Razão Social / Nome de Exibição", value=nome_atual)
-                    logo_file = st.file_uploader("Logotipo (Vetor/Imagem)", type=["png","jpg","jpeg"])
-                    
-                    if st.form_submit_button("Atualizar Plataforma", use_container_width=True):
-                        session = SessionLocal()
-                        emp = session.get(Empresa, emp_id)
-                        emp.nome_fantasia = novo_nome
-                        
-                        if logo_file:
-                            ext = logo_file.name.rsplit(".", 1)[-1]
-                            path = os.path.join("logos", f"logo_{emp_id}.{ext}")
-                            with open(path, "wb") as f: 
-                                f.write(logo_file.getbuffer())
-                            emp.logo_path = path
-                            
-                        session.commit()
-                        session.close()
-                        
-                        st.success("Branding atualizado com sucesso!")
-                        time.sleep(0.5)
-                        st.rerun()
