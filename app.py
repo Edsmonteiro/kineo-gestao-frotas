@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
-from database import engine, SessionLocal, Veiculo, Contrato, SubstituicaoContrato, Custo, Usuario, Empresa, CobrancaRecorrente, CobrancaMensal
+from database import engine, SessionLocal, Veiculo, Contrato, Custo, Usuario, Empresa, CobrancaRecorrente, CobrancaMensal
 from datetime import date, timedelta
 import calendar
 import os
@@ -528,68 +528,6 @@ def page_header(title: str, subtitle: str = ""):
 def fmt_brl(valor: float) -> str:
     return f"R$ {valor:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
 
-def obter_contrato_ativo_do_principal(session, empresa_id, veiculo_id):
-    return session.query(Contrato).filter(
-        Contrato.empresa_id == empresa_id,
-        Contrato.veiculo_id == veiculo_id,
-        Contrato.ativo == 1
-    ).order_by(Contrato.data_inicio.desc()).first()
-
-def obter_substituicao_ativa_por_principal(session, empresa_id, veiculo_id):
-    return session.query(SubstituicaoContrato).filter(
-        SubstituicaoContrato.empresa_id == empresa_id,
-        SubstituicaoContrato.veiculo_principal_id == veiculo_id,
-        SubstituicaoContrato.ativo == 1
-    ).order_by(SubstituicaoContrato.data_inicio.desc()).first()
-
-def obter_substituicao_ativa_por_reserva(session, empresa_id, veiculo_id):
-    return session.query(SubstituicaoContrato).filter(
-        SubstituicaoContrato.empresa_id == empresa_id,
-        SubstituicaoContrato.veiculo_substituto_id == veiculo_id,
-        SubstituicaoContrato.ativo == 1
-    ).order_by(SubstituicaoContrato.data_inicio.desc()).first()
-
-def iniciar_substituicao_contrato(session, empresa_id, contrato, veiculo_principal, veiculo_substituto, usuario):
-    if contrato is None or contrato.ativo != 1:
-        raise ValueError("O veículo principal não possui contrato vigente.")
-    if veiculo_principal.id == veiculo_substituto.id:
-        raise ValueError("O veículo substituto deve ser diferente do principal.")
-    if veiculo_substituto.status != "Disponível":
-        raise ValueError("O veículo substituto precisa estar com status Disponível.")
-    if obter_substituicao_ativa_por_principal(session, empresa_id, veiculo_principal.id):
-        raise ValueError("Já existe uma substituição ativa para este veículo principal.")
-    if obter_substituicao_ativa_por_reserva(session, empresa_id, veiculo_substituto.id):
-        raise ValueError("O veículo selecionado já está sendo utilizado como reserva.")
-
-    substituicao = SubstituicaoContrato(
-        empresa_id=empresa_id,
-        contrato_id=contrato.id,
-        veiculo_principal_id=veiculo_principal.id,
-        veiculo_substituto_id=veiculo_substituto.id,
-        data_inicio=date.today(),
-        data_fim=None,
-        ativo=1,
-        usuario_lancamento=usuario
-    )
-    session.add(substituicao)
-    veiculo_principal.status = "Manutenção"
-    veiculo_substituto.status = "Alugado"
-    return substituicao
-
-def finalizar_substituicao_contrato(session, substituicao, status_principal="Alugado"):
-    principal = session.get(Veiculo, substituicao.veiculo_principal_id)
-    substituto = session.get(Veiculo, substituicao.veiculo_substituto_id)
-
-    substituicao.ativo = 0
-    substituicao.data_fim = date.today()
-
-    if principal is not None:
-        principal.status = status_principal
-    if substituto is not None:
-        substituto.status = "Disponível"
-
-    return principal, substituto
-
 PLOTLY_LAYOUT = dict(
     template="plotly_white",
     paper_bgcolor="rgba(0,0,0,0)",
@@ -1046,7 +984,7 @@ else:
 
             st.markdown("<br>", unsafe_allow_html=True)
             
-            tab_admin, tab_status, tab_gastos, tab_saude = st.tabs(["Cadastro de veículos", "Alterar status", "Análise de gastos", "Saúde da frota"])
+            tab_admin, tab_gastos, tab_saude = st.tabs(["Cadastro de veículos", "Análise de gastos", "Saúde da frota"])
 
             # ── Aba: Cadastro ─────────────────────────────────────────────────────
             with tab_admin:
@@ -1237,115 +1175,6 @@ else:
                                 st.rerun()
                             else:
                                 st.error("Marque a confirmação para prosseguir.", icon=None)
-
-            # ── Aba: Alterar Status ────────────────────────────────────────────────
-            with tab_status:
-                if total == 0:
-                    st.info("Nenhum veículo cadastrado.", icon=None)
-                else:
-                    with st.container(border=True):
-                        st.markdown("**Alteração operacional do veículo**")
-                        st.caption("Quando um veículo com contrato vigente entra em manutenção, selecione um veículo disponível para atuar como reserva. Ao retornar o principal para Alugado, o reserva é liberado automaticamente.")
-
-                        opcoes_status = {
-                            f"{r['modelo']} ({r['placa']}) · {r['status']}": int(r['id'])
-                            for _, r in df_veiculos.sort_values(["modelo", "placa"]).iterrows()
-                        }
-                        veiculo_status_sel = st.selectbox(
-                            "Veículo",
-                            list(opcoes_status.keys()),
-                            key="status_veiculo_sel"
-                        )
-                        veiculo_status_id = opcoes_status[veiculo_status_sel]
-                        row_status = df_veiculos[df_veiculos["id"] == veiculo_status_id].iloc[0]
-                        status_atual = row_status["status"]
-
-                        st.info(f"Status atual: **{status_atual}**", icon=None)
-
-                        novo_status = st.selectbox(
-                            "Novo status",
-                            ["Disponível", "Alugado", "Manutenção"],
-                            index=["Disponível", "Alugado", "Manutenção"].index(status_atual) if status_atual in ["Disponível", "Alugado", "Manutenção"] else 0,
-                            key="status_novo_sel"
-                        )
-
-                        session_preview = SessionLocal()
-                        contrato_ativo_preview = obter_contrato_ativo_do_principal(session_preview, emp_id, veiculo_status_id)
-                        sub_principal_preview = obter_substituicao_ativa_por_principal(session_preview, emp_id, veiculo_status_id)
-                        sub_reserva_preview = obter_substituicao_ativa_por_reserva(session_preview, emp_id, veiculo_status_id)
-                        session_preview.close()
-
-                        reserva_id = None
-                        if novo_status == "Manutenção" and contrato_ativo_preview is not None and sub_principal_preview is None:
-                            disponiveis = df_veiculos[
-                                (df_veiculos["status"] == "Disponível") &
-                                (df_veiculos["id"] != veiculo_status_id)
-                            ].copy()
-
-                            if disponiveis.empty:
-                                st.warning("Este veículo possui contrato vigente, mas não há veículo disponível para substituição. Cadastre/libere um veículo antes de enviá-lo para manutenção.", icon=None)
-                            else:
-                                opcoes_reserva = {
-                                    f"{r['modelo']} ({r['placa']})": int(r['id'])
-                                    for _, r in disponiveis.iterrows()
-                                }
-                                reserva_label = st.selectbox(
-                                    "Veículo reserva durante a manutenção",
-                                    list(opcoes_reserva.keys()),
-                                    key="status_reserva_sel"
-                                )
-                                reserva_id = opcoes_reserva[reserva_label]
-                                st.caption(f"Contrato vigente: {contrato_ativo_preview.cliente}")
-
-                        if sub_principal_preview is not None:
-                            st.info("Este veículo é o principal de uma substituição ativa. Ao retornar para **Alugado**, o veículo reserva será liberado automaticamente.", icon=None)
-
-                        if sub_reserva_preview is not None:
-                            st.warning("Este veículo está atuando como reserva de um contrato. O status dele deve ser alterado pelo retorno do veículo principal ou pela aba de Contratos.", icon=None)
-
-                        if st.button("Aplicar alteração de status", use_container_width=True, key="btn_alterar_status_veiculo"):
-                            session = SessionLocal()
-                            try:
-                                veiculo = session.get(Veiculo, veiculo_status_id)
-                                if veiculo is None:
-                                    raise ValueError("Veículo não encontrado.")
-
-                                sub_reserva = obter_substituicao_ativa_por_reserva(session, emp_id, veiculo.id)
-                                if sub_reserva is not None:
-                                    raise ValueError("Este veículo está ativo como reserva e não pode ter o status alterado manualmente.")
-
-                                contrato_ativo = obter_contrato_ativo_do_principal(session, emp_id, veiculo.id)
-                                sub_principal = obter_substituicao_ativa_por_principal(session, emp_id, veiculo.id)
-
-                                if novo_status == veiculo.status:
-                                    st.info("O veículo já está com esse status.", icon=None)
-                                elif novo_status == "Manutenção" and contrato_ativo is not None:
-                                    if sub_principal is not None:
-                                        veiculo.status = "Manutenção"
-                                    else:
-                                        if reserva_id is None:
-                                            raise ValueError("Selecione um veículo reserva para o contrato vigente.")
-                                        reserva = session.get(Veiculo, reserva_id)
-                                        iniciar_substituicao_contrato(
-                                            session, emp_id, contrato_ativo, veiculo, reserva, st.session_state["nome"]
-                                        )
-                                elif novo_status == "Alugado" and sub_principal is not None:
-                                    finalizar_substituicao_contrato(session, sub_principal, status_principal="Alugado")
-                                elif novo_status == "Disponível" and contrato_ativo is not None:
-                                    raise ValueError("Um veículo principal com contrato vigente não pode ser marcado como Disponível. Finalize o contrato ou mantenha-o Alugado/Manutenção.")
-                                else:
-                                    veiculo.status = novo_status
-
-                                session.commit()
-                                st.cache_data.clear()
-                                st.success("Status atualizado com sucesso.")
-                                time.sleep(0.6)
-                                st.rerun()
-                            except Exception as e:
-                                session.rollback()
-                                st.error(str(e), icon=None)
-                            finally:
-                                session.close()
 
             # ── Aba: Gastos ───────────────────────────────────────────────────────
             with tab_gastos:
@@ -1592,75 +1421,34 @@ else:
                 if st.session_state["perfil"] == "admin":
                     with st.expander("Excluir registro financeiro"):
                         df_ex = carregar_dados_tabela(f"""
-                            SELECT c.id, c.data_custo, v.placa, c.categoria, c.valor_total
-                            FROM custos c
-                            JOIN veiculos v ON c.veiculo_id = v.id
-                            WHERE c.empresa_id = {emp_id}
-                            ORDER BY c.data_custo DESC
+                            SELECT c.id, c.data_custo, v.placa, c.categoria, c.valor_total 
+                            FROM custos c JOIN veiculos v ON c.veiculo_id=v.id 
+                            WHERE c.empresa_id={emp_id} ORDER BY c.data_custo DESC
                         """, emp_id)
-
+                        
                         if not df_ex.empty:
-                            opcoes_c = {
-                                f"{pd.to_datetime(r['data_custo']).strftime('%d/%m/%Y')} · {r['placa']} · {r['categoria']} ({fmt_brl(float(r['valor_total'] or 0))})": r["id"]
-                                for _, r in df_ex.iterrows()
-                            }
+                            opcoes_c = {f"{pd.to_datetime(r['data_custo']).strftime('%d/%m/%Y')} · {r['placa']} · {r['categoria']} ({fmt_brl(r['valor_total'])})": r["id"] for _, r in df_ex.iterrows()}
                             custo_exc = st.selectbox("Selecione o lançamento", list(opcoes_c.keys()))
-
-                            if st.button("Excluir definitivamente", use_container_width=True, key="btn_excluir_custo"):
+                            
+                            if st.button("Excluir definitivamente", use_container_width=True):
                                 session = SessionLocal()
-                                try:
-                                    custo_id = opcoes_c[custo_exc]
-                                    custo = session.get(Custo, custo_id)
-                                    if custo is None:
-                                        st.warning("O lançamento selecionado não foi encontrado.", icon=None)
-                                    else:
-                                        session.delete(custo)
-                                        session.commit()
-                                        st.cache_data.clear()
-                                        st.success("Registro financeiro excluído com sucesso.")
-                                        time.sleep(0.5)
-                                        st.rerun()
-                                except Exception:
-                                    session.rollback()
-                                    st.error("Não foi possível excluir o registro financeiro.", icon=None)
-                                finally:
-                                    session.close()
-                        else:
-                            st.info("Nenhum registro financeiro disponível para exclusão.", icon=None)
+                                session.query(Custo).filter(Custo.id == opcoes_c[custo_exc]).delete()
+                                session.commit()
+                                session.close()
+                                st.rerun()
 
                 # Tabela de custos
                 df_custos = carregar_dados_tabela(f"""
-                    SELECT
-                        c.id,
-                        c.data_custo,
-                        v.placa,
-                        c.categoria,
-                        c.descricao,
-                        c.valor_total,
-                        c.forma_pagamento,
-                        c.condicao_pagamento,
-                        c.parcelas,
-                        c.motorista,
-                        c.comprovante
-                    FROM custos c
-                    JOIN veiculos v ON c.veiculo_id = v.id
-                    WHERE c.empresa_id = {emp_id}
-                    ORDER BY c.data_custo DESC
+                    SELECT c.id, c.data_custo as Data, v.placa as Placa, c.categoria as Categoria,
+                           c.descricao as Descrição, c.valor_total as Valor,
+                           c.forma_pagamento, c.condicao_pagamento, c.parcelas,
+                           c.motorista as Motorista, c.comprovante
+                    FROM custos c JOIN veiculos v ON c.veiculo_id=v.id
+                    WHERE c.empresa_id={emp_id} ORDER BY c.data_custo DESC
                 """, emp_id)
 
                 if not df_custos.empty:
-                    df_custos = df_custos.rename(columns={
-                        "data_custo": "Data",
-                        "placa": "Placa",
-                        "categoria": "Categoria",
-                        "descricao": "Descrição",
-                        "valor_total": "Valor",
-                        "motorista": "Motorista",
-                    })
-
-                    df_custos["Data"] = pd.to_datetime(
-                        df_custos["Data"], errors="coerce"
-                    ).dt.strftime("%d/%m/%Y")
+                    df_custos["Data"] = pd.to_datetime(df_custos["Data"]).dt.strftime("%d/%m/%Y")
                     df_custos["Pagamento"] = df_custos.apply(
                         lambda r: f"{r['forma_pagamento']} · {int(r['parcelas'])}x" 
                         if r["forma_pagamento"] == "Cartão de Crédito" and r["condicao_pagamento"] == "Parcelado" 
@@ -1854,8 +1642,11 @@ else:
         # CONTRATOS E LOCAÇÃO
         # ══════════════════════════════════════════════════════════════════════════
         elif tela_ativa == "Contratos e Locação":
-            page_header("Gestão de Contratos", "Controle o ciclo de vida comercial da frota e as substituições temporárias.")
+            page_header("Gestão de Contratos", "Controle o ciclo de vida comercial da frota.")
 
+            # Consulta simples e compatível com SQLite/PostgreSQL.
+            # Os nomes amigáveis são aplicados no Pandas, evitando aliases
+            # com espaços, acentos ou aspas simples no SQL.
             df_veiculos = carregar_dados_tabela(f"""
                 SELECT id, placa, modelo, status
                 FROM veiculos
@@ -1863,54 +1654,40 @@ else:
                 ORDER BY modelo, placa
             """, emp_id)
 
-            df_contratos = carregar_dados_tabela(f"""
-                SELECT
-                    c.id,
-                    c.veiculo_id,
-                    c.cliente,
-                    c.cnpj,
-                    vp.placa AS placa_principal,
-                    vp.modelo AS modelo_principal,
-                    vp.status AS status_principal,
-                    c.ativo,
-                    c.data_inicio,
-                    c.data_fim,
-                    c.tipo_valor,
-                    c.valor_mensal,
-                    c.multa,
-                    c.juros,
-                    c.km_final,
-                    c.usuario_lancamento,
-                    s.id AS substituicao_id,
-                    s.veiculo_substituto_id,
-                    vr.placa AS placa_reserva,
-                    vr.modelo AS modelo_reserva,
-                    s.data_inicio AS inicio_substituicao
-                FROM contratos c
-                INNER JOIN veiculos vp ON c.veiculo_id = vp.id
-                LEFT JOIN substituicoes_contrato s
-                    ON s.contrato_id = c.id AND s.ativo = 1
-                LEFT JOIN veiculos vr
-                    ON s.veiculo_substituto_id = vr.id
-                WHERE c.empresa_id = {emp_id}
-                ORDER BY c.ativo DESC, c.data_inicio DESC
-            """, emp_id)
-
-            tab_visao, tab_novo, tab_editar, tab_substituicao = st.tabs([
+            tab_visao, tab_novo, tab_editar = st.tabs([
                 "Painel Comercial",
                 "Abertura de Contrato",
-                "Finalização / Aditivos",
-                "Substituição / Manutenção"
+                "Finalização / Aditivos"
             ])
 
             # ── Aba 1: Visão Geral ────────────────────────────────────────────────
             with tab_visao:
+                df_contratos = carregar_dados_tabela(f"""
+                    SELECT
+                        c.id,
+                        c.cliente,
+                        c.cnpj,
+                        v.placa,
+                        c.ativo,
+                        c.data_inicio,
+                        c.data_fim,
+                        c.tipo_valor,
+                        c.valor_mensal,
+                        c.multa,
+                        c.juros,
+                        c.km_final,
+                        c.usuario_lancamento
+                    FROM contratos c
+                    INNER JOIN veiculos v ON c.veiculo_id = v.id
+                    WHERE c.empresa_id = {emp_id}
+                    ORDER BY c.ativo DESC, c.data_inicio DESC
+                """, emp_id)
+
                 if not df_contratos.empty:
-                    df_exib = df_contratos.rename(columns={
+                    df_contratos = df_contratos.rename(columns={
                         "cliente": "Cliente",
                         "cnpj": "CNPJ",
-                        "placa_principal": "Veículo Principal",
-                        "placa_reserva": "Veículo Reserva",
+                        "placa": "Placa",
                         "data_inicio": "Início",
                         "data_fim": "Fim",
                         "tipo_valor": "Tipo",
@@ -1918,326 +1695,462 @@ else:
                         "multa": "Multa (%)",
                         "juros": "Juros (%)",
                         "usuario_lancamento": "Criado por",
-                    }).copy()
+                    })
 
-                    df_exib["Início"] = pd.to_datetime(df_exib["Início"], errors="coerce").dt.strftime("%d/%m/%Y")
-                    df_exib["Fim"] = pd.to_datetime(df_exib["Fim"], errors="coerce").dt.strftime("%d/%m/%Y").fillna("—")
-                    df_exib["Veículo Reserva"] = df_exib["Veículo Reserva"].fillna("—")
-                    df_exib["Uso Atual"] = df_exib.apply(
-                        lambda r: r["Veículo Reserva"] if r["Veículo Reserva"] != "—" else r["Veículo Principal"], axis=1
-                    )
-                    df_exib["Status"] = df_exib["ativo"].apply(lambda x: "Ativo" if x == 1 else "Baixado")
+                    # Normaliza datas sem transformar NaT em texto "NaT".
+                    df_contratos["Início"] = pd.to_datetime(
+                        df_contratos["Início"], errors="coerce"
+                    ).dt.strftime("%d/%m/%Y")
+                    df_contratos["Fim"] = pd.to_datetime(
+                        df_contratos["Fim"], errors="coerce"
+                    ).dt.strftime("%d/%m/%Y")
+                    df_contratos["Fim"] = df_contratos["Fim"].fillna("—")
 
-                    for col in ["Valor", "Multa (%)", "Juros (%)"]:
-                        df_exib[col] = pd.to_numeric(df_exib[col], errors="coerce").fillna(0.0)
+                    for col in ["Valor", "Multa (%)", "Juros (%)", "km_final"]:
+                        if col in df_contratos.columns:
+                            df_contratos[col] = pd.to_numeric(
+                                df_contratos[col], errors="coerce"
+                            ).fillna(0.0)
 
-                    _, h2 = st.columns([4, 1])
+                    df_ativos = df_contratos[df_contratos["ativo"] == 1].copy()
+                    df_encer = df_contratos[df_contratos["ativo"] == 0].copy()
+
+                    def cor_ativo(v):
+                        return "color:#065F46; background:#D1FAE5; font-weight:bold;"
+
+                    def cor_encer(v):
+                        return "color:#1E3A8A; background:#DBEAFE; font-weight:bold;"
+
+                    h1, h2 = st.columns([4, 1])
                     with h2:
-                        csv_ct = convert_df_to_csv(df_exib[[
-                            "Cliente", "CNPJ", "Veículo Principal", "Veículo Reserva", "Uso Atual",
-                            "Status", "Início", "Fim", "Tipo", "Valor"
+                        csv_ct = convert_df_to_csv(df_contratos[[
+                            "Cliente", "CNPJ", "Placa", "ativo",
+                            "Início", "Fim", "Tipo", "Valor"
                         ]])
-                        st.download_button("Exportar Dados", csv_ct, "base_contratos.csv", "text/csv", use_container_width=True)
-
-                    df_ativos = df_exib[df_exib["ativo"] == 1].copy()
-                    df_encerrados = df_exib[df_exib["ativo"] == 0].copy()
-
-                    if not df_ativos.empty:
-                        st.markdown("**Carteira Vigente**")
-                        st.dataframe(
-                            df_ativos[[
-                                "Cliente", "CNPJ", "Veículo Principal", "Veículo Reserva", "Uso Atual",
-                                "Status", "Início", "Fim", "Tipo", "Valor", "Multa (%)", "Juros (%)"
-                            ]],
-                            use_container_width=True,
-                            hide_index=True,
-                            column_config={
-                                "Valor": st.column_config.NumberColumn(format="R$ %.2f"),
-                                "Multa (%)": st.column_config.NumberColumn(format="%.2f%%"),
-                                "Juros (%)": st.column_config.NumberColumn(format="%.2f%%"),
-                            }
+                        st.download_button(
+                            "Exportar Dados",
+                            data=csv_ct,
+                            file_name="base_contratos.csv",
+                            mime="text/csv",
+                            use_container_width=True
                         )
 
-                    if not df_encerrados.empty:
-                        st.markdown("<br>", unsafe_allow_html=True)
-                        st.markdown("**Arquivo Morto (Contratos Finalizados)**")
+                    if not df_ativos.empty:
+                        df_ativos["Status"] = "Ativo"
+                        st.markdown("**Carteira Vigente**")
+                        df_exibicao_ativos = df_ativos[[
+                            "Cliente", "CNPJ", "Placa", "Status", "Início",
+                            "Fim", "Tipo", "Valor", "Multa (%)", "Juros (%)"
+                        ]]
+
+                        if hasattr(df_exibicao_ativos.style, "map"):
+                            styled_df_ativos = df_exibicao_ativos.style.map(
+                                cor_ativo, subset=["Status"]
+                            )
+                        else:
+                            styled_df_ativos = df_exibicao_ativos.style.applymap(
+                                cor_ativo, subset=["Status"]
+                            )
+
+                        styled_df_ativos = styled_df_ativos.format({
+                            "Valor": "R$ {:.2f}",
+                            "Multa (%)": "{:.2f}%",
+                            "Juros (%)": "{:.2f}%"
+                        })
                         st.dataframe(
-                            df_encerrados[[
-                                "Cliente", "CNPJ", "Veículo Principal", "Status", "Início", "Fim", "Tipo", "Valor"
-                            ]],
+                            styled_df_ativos,
                             use_container_width=True,
-                            hide_index=True,
-                            column_config={"Valor": st.column_config.NumberColumn(format="R$ %.2f")}
+                            hide_index=True
+                        )
+
+                    st.markdown("<br>", unsafe_allow_html=True)
+
+                    if not df_encer.empty:
+                        df_encer["Status"] = "Baixado"
+                        st.markdown("**Arquivo Morto (Contratos Finalizados)**")
+                        df_exibicao_encer = df_encer[[
+                            "Cliente", "CNPJ", "Placa", "Status", "Início",
+                            "Fim", "Tipo", "Valor", "Multa (%)", "Juros (%)"
+                        ]]
+
+                        if hasattr(df_exibicao_encer.style, "map"):
+                            styled_df_encer = df_exibicao_encer.style.map(
+                                cor_encer, subset=["Status"]
+                            )
+                        else:
+                            styled_df_encer = df_exibicao_encer.style.applymap(
+                                cor_encer, subset=["Status"]
+                            )
+
+                        styled_df_encer = styled_df_encer.format({
+                            "Valor": "R$ {:.2f}",
+                            "Multa (%)": "{:.2f}%",
+                            "Juros (%)": "{:.2f}%"
+                        })
+                        st.dataframe(
+                            styled_df_encer,
+                            use_container_width=True,
+                            hide_index=True
                         )
                 else:
                     st.info("Plataforma sem contratos firmados.", icon=None)
 
             # ── Aba 2: Novo Contrato ──────────────────────────────────────────────
             with tab_novo:
-                disponiveis_novo = df_veiculos[df_veiculos["status"] == "Disponível"].copy()
-                if disponiveis_novo.empty:
-                    st.warning("Não há veículo disponível para abertura de novo contrato.", icon=None)
+                if df_veiculos.empty:
+                    st.warning(
+                        "É necessária a aquisição de um veículo na plataforma antes da locação.",
+                        icon=None
+                    )
                 else:
                     with st.container(border=True):
-                        opcoes_v = {f"{r['modelo']} ({r['placa']})": int(r['id']) for _, r in disponiveis_novo.iterrows()}
-                        veiculo_sel = st.selectbox("Ativo a ser alocado", list(opcoes_v.keys()), key="nc_v")
+                        opcoes_v = {
+                            f"{row['modelo']} ({row['placa']})": row['id']
+                            for _, row in df_veiculos.iterrows()
+                        }
+                        veiculo_sel = st.selectbox(
+                            "Ativo a ser alocado",
+                            list(opcoes_v.keys()),
+                            key="nc_v"
+                        )
 
                         ca, cb = st.columns(2)
-                        cliente = ca.text_input("Locatário (Razão Social)", key="nc_cliente")
-                        cnpj = cb.text_input("Documento (CNPJ/CPF)", key="nc_cnpj")
+                        cliente = ca.text_input(
+                            "Locatário (Razão Social)", key="nc_cliente"
+                        )
+                        cnpj = cb.text_input(
+                            "Documento (CNPJ/CPF)", key="nc_cnpj"
+                        )
+
                         cc, cd = st.columns(2)
-                        d_inicio = cc.date_input("Início da Vigência", format="DD/MM/YYYY", key="nc_inicio")
-                        km_ini = cd.number_input("Odômetro de Saída", min_value=0.0, step=50.0, value=0.0, key="nc_km_ini")
+                        d_inicio = cc.date_input(
+                            "Início da Vigência",
+                            format="DD/MM/YYYY",
+                            key="nc_inicio"
+                        )
+                        km_ini = cd.number_input(
+                            "Odômetro de Saída",
+                            min_value=0.0,
+                            step=50.0,
+                            value=0.0,
+                            key="nc_km_ini"
+                        )
 
                         st.markdown("---")
                         st.markdown("**Acordo Comercial**")
                         ce, cf = st.columns(2)
-                        tipo_v = ce.selectbox("Formato de Receita", ["Fixo", "Variável"], key="nc_tipo")
-                        valor_m = cf.number_input("Mensalidade (R$)", min_value=0.0, step=100.0, value=0.0, disabled=(tipo_v == "Variável"), key="nc_valor")
-                        cg, ch = st.columns(2)
-                        multa_c = cg.number_input("Cláusula de Atraso - Multa (%)", min_value=0.0, step=1.0, value=2.0, key="nc_multa")
-                        juros_c = ch.number_input("Cláusula de Atraso - Juros/Mês (%)", min_value=0.0, step=0.1, value=1.0, key="nc_juros")
+                        tipo_v = ce.selectbox(
+                            "Formato de Receita",
+                            ["Fixo", "Variável"],
+                            key="nc_tipo"
+                        )
+                        valor_m = cf.number_input(
+                            "Mensalidade (R$)",
+                            min_value=0.0,
+                            step=100.0,
+                            value=0.0,
+                            disabled=(tipo_v == "Variável"),
+                            key="nc_valor"
+                        )
 
-                        if st.button("Efetivar Alocação", use_container_width=True, key="btn_novo_contrato"):
+                        cg, ch = st.columns(2)
+                        multa_c = cg.number_input(
+                            "Cláusula de Atraso - Multa (%)",
+                            min_value=0.0,
+                            step=1.0,
+                            value=2.0,
+                            key="nc_multa"
+                        )
+                        juros_c = ch.number_input(
+                            "Cláusula de Atraso - Juros/Mês (%)",
+                            min_value=0.0,
+                            step=0.1,
+                            value=1.0,
+                            key="nc_juros"
+                        )
+
+                        st.markdown("---")
+                        is_ativo = st.checkbox(
+                            "Manter contrato em status Vigente",
+                            value=True,
+                            key="nc_ativo"
+                        )
+
+                        d_fim = None
+                        km_fim = 0.0
+
+                        if not is_ativo:
+                            ci, cj = st.columns(2)
+                            d_fim = ci.date_input(
+                                "Baixa do Contrato",
+                                format="DD/MM/YYYY",
+                                key="nc_fim"
+                            )
+                            km_fim = cj.number_input(
+                                "Odômetro de Chegada",
+                                min_value=0.0,
+                                step=50.0,
+                                value=0.0,
+                                key="nc_km_fim"
+                            )
+
+                        if st.button(
+                            "Efetivar Alocação",
+                            use_container_width=True,
+                            key="btn_novo_contrato"
+                        ):
                             if not cliente.strip():
-                                st.error("Identificação do Locatário obrigatória.", icon=None)
+                                st.error(
+                                    "Identificação do Locatário obrigatória.",
+                                    icon=None
+                                )
                             else:
                                 session = SessionLocal()
                                 try:
-                                    veiculo = session.get(Veiculo, opcoes_v[veiculo_sel])
-                                    if veiculo is None or veiculo.status != "Disponível":
-                                        raise ValueError("O veículo selecionado não está mais disponível.")
+                                    veiculo_id = opcoes_v[veiculo_sel]
+                                    veiculo = session.get(Veiculo, veiculo_id)
 
-                                    contrato = Contrato(
-                                        empresa_id=emp_id, veiculo_id=veiculo.id, cliente=cliente.strip(), cnpj=cnpj.strip(),
-                                        data_inicio=d_inicio, data_fim=None, km_inicial=km_ini, km_final=0.0, ativo=1,
-                                        usuario_lancamento=st.session_state["nome"], tipo_valor=tipo_v,
-                                        valor_mensal=valor_m if tipo_v == "Fixo" else 0.0, multa=multa_c, juros=juros_c
-                                    )
-                                    session.add(contrato)
-                                    veiculo.status = "Alugado"
-                                    session.commit()
-                                    st.cache_data.clear()
-                                    st.success("Contrato consolidado na base!")
-                                    time.sleep(0.7)
-                                    st.rerun()
+                                    if veiculo is None:
+                                        st.error(
+                                            "O veículo selecionado não foi encontrado no banco de dados.",
+                                            icon=None
+                                        )
+                                    else:
+                                        contrato = Contrato(
+                                            empresa_id=emp_id,
+                                            veiculo_id=veiculo_id,
+                                            cliente=cliente.strip(),
+                                            cnpj=cnpj.strip(),
+                                            data_inicio=d_inicio,
+                                            data_fim=d_fim,
+                                            km_inicial=km_ini,
+                                            km_final=km_fim,
+                                            ativo=1 if is_ativo else 0,
+                                            usuario_lancamento=st.session_state["nome"],
+                                            tipo_valor=tipo_v,
+                                            valor_mensal=valor_m if tipo_v == "Fixo" else 0.0,
+                                            multa=multa_c,
+                                            juros=juros_c
+                                        )
+                                        session.add(contrato)
+                                        veiculo.status = "Alugado" if is_ativo else "Disponível"
+                                        session.commit()
+                                        st.success("Contrato consolidado na base!")
+                                        time.sleep(1)
+                                        st.rerun()
+
                                 except Exception as e:
                                     session.rollback()
-                                    st.error(str(e), icon=None)
+                                    st.error(
+                                        f"Não foi possível consolidar o contrato: {e}",
+                                        icon=None
+                                    )
                                 finally:
                                     session.close()
 
             # ── Aba 3: Editar / Encerrar Contrato ─────────────────────────────────
             with tab_editar:
-                if df_contratos.empty:
-                    st.info("O módulo não localizou contratos para manutenção.", icon=None)
-                else:
+                if not df_contratos.empty:
                     with st.container(border=True):
-                        opcoes_ct = {
-                            f"{r['cliente']} · {r['placa_principal']} ({'Vigente' if r['ativo'] == 1 else 'Baixado'})": int(r['id'])
+                        opt_ct = {
+                            f"{r['Cliente']} · {r['Placa']} ({'Vigente' if r['ativo'] == 1 else 'Baixado'})": r["id"]
                             for _, r in df_contratos.iterrows()
                         }
-                        ct_sel = st.selectbox("Contrato", list(opcoes_ct.keys()), key="ec_contrato")
-                        ct_id = opcoes_ct[ct_sel]
-                        row_ct = df_contratos[df_contratos["id"] == ct_id].iloc[0]
+                        ct_sel = st.selectbox(
+                            "Apólice Alvo",
+                            list(opt_ct.keys()),
+                            key="ec_contrato"
+                        )
+                        ct_id = opt_ct[ct_sel]
+                        row_ct = df_contratos[
+                            df_contratos["id"] == ct_id
+                        ].iloc[0]
 
-                        ea, eb = st.columns(2)
-                        e_cliente = ea.text_input("Locatário", value=str(row_ct["cliente"] or ""), key="ec_cli")
-                        e_cnpj = eb.text_input("Documento", value=str(row_ct["cnpj"] or ""), key="ec_cnpj")
-                        ec, ed = st.columns(2)
-                        e_dinicio = ec.date_input("Início da Vigência", value=pd.to_datetime(row_ct["data_inicio"]).date(), key="ec_di")
-                        e_ativo = ed.checkbox("Manter Status Vigente", value=(row_ct["ativo"] == 1), key="ec_ativo")
+                        c_ea, c_eb = st.columns(2)
+                        e_cliente = c_ea.text_input(
+                            "Locatário",
+                            value=str(row_ct["Cliente"] or ""),
+                            key="ec_cli"
+                        )
+                        e_cnpj = c_eb.text_input(
+                            "Documento",
+                            value=str(row_ct["CNPJ"] or ""),
+                            key="ec_cnpj"
+                        )
+
+                        c_ec, c_ed = st.columns(2)
+                        try:
+                            dt_ini_val = pd.to_datetime(
+                                row_ct["Início"],
+                                format="%d/%m/%Y"
+                            ).date()
+                        except (ValueError, TypeError):
+                            dt_ini_val = date.today()
+
+                        e_dinicio = c_ec.date_input(
+                            "Início da Vigência",
+                            value=dt_ini_val,
+                            key="ec_di"
+                        )
+                        e_ativo = c_ed.checkbox(
+                            "Manter Status Vigente",
+                            value=(row_ct["ativo"] == 1),
+                            key="ec_ativo"
+                        )
 
                         e_dfim = None
-                        e_kmfim = float(row_ct["km_final"] or 0)
+                        e_kmfim = 0.0
+
                         if not e_ativo:
-                            ee, ef = st.columns(2)
-                            dt_fim = pd.to_datetime(row_ct["data_fim"], errors="coerce")
-                            e_dfim = ee.date_input("Baixa do Contrato", value=date.today() if pd.isna(dt_fim) else dt_fim.date(), key="ec_df")
-                            e_kmfim = ef.number_input("Odômetro de Chegada", min_value=0.0, step=50.0, value=e_kmfim, key="ec_kmf")
+                            c_ee, c_ef = st.columns(2)
+                            try:
+                                if row_ct["Fim"] != "—":
+                                    dt_fim_val = pd.to_datetime(
+                                        row_ct["Fim"],
+                                        format="%d/%m/%Y"
+                                    ).date()
+                                else:
+                                    dt_fim_val = date.today()
+                            except (ValueError, TypeError):
+                                dt_fim_val = date.today()
+
+                            e_dfim = c_ee.date_input(
+                                "Baixa do Contrato",
+                                value=dt_fim_val,
+                                key="ec_df"
+                            )
+                            e_kmfim = c_ef.number_input(
+                                "Odômetro de Chegada",
+                                min_value=0.0,
+                                step=50.0,
+                                value=float(row_ct["km_final"] or 0),
+                                key="ec_kmf"
+                            )
 
                         st.markdown("---")
-                        eg, eh = st.columns(2)
-                        e_tipo = eg.selectbox("Formato de Receita", ["Fixo", "Variável"], index=0 if row_ct["tipo_valor"] == "Fixo" else 1, key="ec_t")
-                        e_val = eh.number_input("Mensalidade (R$)", min_value=0.0, step=100.0, value=float(row_ct["valor_mensal"] or 0), disabled=(e_tipo == "Variável"), key="ec_v")
-                        ei, ej = st.columns(2)
-                        e_multa = ei.number_input("Cláusula de Multa (%)", min_value=0.0, step=1.0, value=float(row_ct["multa"] or 0), key="ec_m")
-                        e_juros = ej.number_input("Cláusula de Juros (%)", min_value=0.0, step=0.1, value=float(row_ct["juros"] or 0), key="ec_j")
+                        st.markdown("**Acordo Comercial**")
+                        c_eg, c_eh = st.columns(2)
+                        e_tipo = c_eg.selectbox(
+                            "Formato de Receita",
+                            ["Fixo", "Variável"],
+                            index=0 if row_ct["Tipo"] == "Fixo" else 1,
+                            key="ec_t"
+                        )
+                        e_val = c_eh.number_input(
+                            "Mensalidade (R$)",
+                            min_value=0.0,
+                            step=100.0,
+                            value=float(row_ct["Valor"] or 0),
+                            disabled=(e_tipo == "Variável"),
+                            key="ec_v"
+                        )
 
-                        b1, b2 = st.columns(2)
-                        if b1.button("Assinar Aditivo (Salvar)", use_container_width=True, key="btn_salvar_contrato"):
+                        c_ei, c_ej = st.columns(2)
+                        e_multa = c_ei.number_input(
+                            "Cláusula de Multa (%)",
+                            min_value=0.0,
+                            step=1.0,
+                            value=float(row_ct["Multa (%)"] or 0),
+                            key="ec_m"
+                        )
+                        e_juros = c_ej.number_input(
+                            "Cláusula de Juros (%)",
+                            min_value=0.0,
+                            step=0.1,
+                            value=float(row_ct["Juros (%)"] or 0),
+                            key="ec_j"
+                        )
+
+                        st.markdown("<br>", unsafe_allow_html=True)
+                        b_col1, b_col2 = st.columns(2)
+
+                        if b_col1.button(
+                            "Assinar Aditivo (Salvar)",
+                            use_container_width=True,
+                            key="btn_salvar_contrato"
+                        ):
                             session = SessionLocal()
                             try:
                                 contrato = session.get(Contrato, ct_id)
+
                                 if contrato is None:
-                                    raise ValueError("Contrato não encontrado.")
-
-                                contrato.cliente = e_cliente.strip()
-                                contrato.cnpj = e_cnpj.strip()
-                                contrato.data_inicio = e_dinicio
-                                contrato.tipo_valor = e_tipo
-                                contrato.valor_mensal = e_val if e_tipo == "Fixo" else 0.0
-                                contrato.multa = e_multa
-                                contrato.juros = e_juros
-
-                                principal = session.get(Veiculo, contrato.veiculo_id)
-                                sub = session.query(SubstituicaoContrato).filter(
-                                    SubstituicaoContrato.contrato_id == contrato.id,
-                                    SubstituicaoContrato.ativo == 1
-                                ).first()
-
-                                if e_ativo:
-                                    contrato.ativo = 1
-                                    contrato.data_fim = None
-                                    if principal is not None and sub is None:
-                                        principal.status = "Alugado"
+                                    st.error("Contrato não encontrado.", icon=None)
                                 else:
-                                    contrato.ativo = 0
+                                    contrato.cliente = e_cliente.strip()
+                                    contrato.cnpj = e_cnpj.strip()
+                                    contrato.data_inicio = e_dinicio
+                                    contrato.ativo = 1 if e_ativo else 0
                                     contrato.data_fim = e_dfim
-                                    contrato.km_final = e_kmfim or 0.0
-                                    if sub is not None:
-                                        finalizar_substituicao_contrato(session, sub, status_principal="Disponível")
-                                    elif principal is not None:
-                                        principal.status = "Disponível"
+                                    contrato.km_final = e_kmfim
+                                    contrato.tipo_valor = e_tipo
+                                    contrato.valor_mensal = e_val if e_tipo == "Fixo" else 0.0
+                                    contrato.multa = e_multa
+                                    contrato.juros = e_juros
 
-                                session.commit()
-                                st.cache_data.clear()
-                                st.success("Base atualizada com sucesso!")
-                                time.sleep(0.7)
-                                st.rerun()
+                                    veiculo = session.get(
+                                        Veiculo,
+                                        contrato.veiculo_id
+                                    )
+                                    if veiculo is not None:
+                                        veiculo.status = "Alugado" if e_ativo else "Disponível"
+
+                                    session.commit()
+                                    st.success("Base atualizada com sucesso!")
+                                    time.sleep(1)
+                                    st.rerun()
+
                             except Exception as e:
                                 session.rollback()
-                                st.error(str(e), icon=None)
+                                st.error(
+                                    f"Não foi possível atualizar o contrato: {e}",
+                                    icon=None
+                                )
                             finally:
                                 session.close()
 
                         if st.session_state["perfil"] == "admin":
-                            if b2.button("Expurgar do Banco de Dados", use_container_width=True, key="btn_excluir_contrato"):
+                            if b_col2.button(
+                                "Expurgar do Banco de Dados",
+                                use_container_width=True,
+                                key="btn_excluir_contrato"
+                            ):
                                 session = SessionLocal()
                                 try:
                                     contrato = session.get(Contrato, ct_id)
+
                                     if contrato is None:
-                                        raise ValueError("Contrato não encontrado.")
-                                    principal = session.get(Veiculo, contrato.veiculo_id)
-                                    sub = session.query(SubstituicaoContrato).filter(
-                                        SubstituicaoContrato.contrato_id == contrato.id,
-                                        SubstituicaoContrato.ativo == 1
-                                    ).first()
-                                    if sub is not None:
-                                        finalizar_substituicao_contrato(session, sub, status_principal="Disponível")
-                                    elif principal is not None:
-                                        principal.status = "Disponível"
-                                    session.query(SubstituicaoContrato).filter(SubstituicaoContrato.contrato_id == contrato.id).delete()
-                                    session.delete(contrato)
-                                    session.commit()
-                                    st.cache_data.clear()
-                                    st.success("Registro removido.")
-                                    time.sleep(0.7)
-                                    st.rerun()
-                                except Exception as e:
-                                    session.rollback()
-                                    st.error(str(e), icon=None)
-                                finally:
-                                    session.close()
-
-            # ── Aba 4: Substituição / Manutenção ──────────────────────────────────
-            with tab_substituicao:
-                contratos_ativos = df_contratos[df_contratos["ativo"] == 1].copy()
-                if contratos_ativos.empty:
-                    st.info("Não há contratos vigentes para substituição.", icon=None)
-                else:
-                    with st.container(border=True):
-                        opcoes_sub_ct = {
-                            f"{r['cliente']} · {r['modelo_principal']} ({r['placa_principal']})": int(r['id'])
-                            for _, r in contratos_ativos.iterrows()
-                        }
-                        sub_ct_label = st.selectbox("Contrato vigente", list(opcoes_sub_ct.keys()), key="sub_ct_sel")
-                        sub_ct_id = opcoes_sub_ct[sub_ct_label]
-                        sub_row = contratos_ativos[contratos_ativos["id"] == sub_ct_id].iloc[0]
-
-                        st.markdown(f"**Veículo principal:** {sub_row['modelo_principal']} ({sub_row['placa_principal']})")
-
-                        if pd.notna(sub_row["substituicao_id"]):
-                            st.warning(f"Substituição ativa: {sub_row['modelo_reserva']} ({sub_row['placa_reserva']}) está atendendo o cliente durante a manutenção.", icon=None)
-                            if st.button("Retornar veículo principal ao contrato", use_container_width=True, key="btn_retorno_principal"):
-                                session = SessionLocal()
-                                try:
-                                    sub = session.get(SubstituicaoContrato, int(sub_row["substituicao_id"]))
-                                    if sub is None or sub.ativo != 1:
-                                        raise ValueError("A substituição já foi encerrada.")
-                                    finalizar_substituicao_contrato(session, sub, status_principal="Alugado")
-                                    session.commit()
-                                    st.cache_data.clear()
-                                    st.success("Veículo principal retornou ao contrato e o reserva foi liberado.")
-                                    time.sleep(0.7)
-                                    st.rerun()
-                                except Exception as e:
-                                    session.rollback()
-                                    st.error(str(e), icon=None)
-                                finally:
-                                    session.close()
-                        else:
-                            disponiveis_sub = df_veiculos[
-                                (df_veiculos["status"] == "Disponível") &
-                                (df_veiculos["id"] != int(sub_row["veiculo_id"]))
-                            ].copy()
-                            if disponiveis_sub.empty:
-                                st.warning("Não há veículo disponível para atuar como reserva.", icon=None)
-                            else:
-                                opcoes_reserva_ct = {
-                                    f"{r['modelo']} ({r['placa']})": int(r['id'])
-                                    for _, r in disponiveis_sub.iterrows()
-                                }
-                                reserva_ct_label = st.selectbox("Veículo reserva", list(opcoes_reserva_ct.keys()), key="sub_reserva_ct")
-                                if st.button("Enviar principal para manutenção e ativar reserva", use_container_width=True, key="btn_iniciar_sub"):
-                                    session = SessionLocal()
-                                    try:
-                                        contrato = session.get(Contrato, sub_ct_id)
-                                        principal = session.get(Veiculo, contrato.veiculo_id) if contrato else None
-                                        reserva = session.get(Veiculo, opcoes_reserva_ct[reserva_ct_label])
-                                        if contrato is None or principal is None or reserva is None:
-                                            raise ValueError("Não foi possível carregar os dados da substituição.")
-                                        iniciar_substituicao_contrato(
-                                            session, emp_id, contrato, principal, reserva, st.session_state["nome"]
+                                        st.warning(
+                                            "Contrato não encontrado.",
+                                            icon=None
                                         )
+                                    else:
+                                        veiculo = session.get(
+                                            Veiculo,
+                                            contrato.veiculo_id
+                                        )
+                                        session.delete(contrato)
+                                        if veiculo is not None:
+                                            veiculo.status = "Disponível"
                                         session.commit()
-                                        st.cache_data.clear()
-                                        st.success("Substituição ativada. O principal foi enviado para manutenção e o reserva assumiu o atendimento.")
-                                        time.sleep(0.7)
+                                        st.success("Registro removido.")
+                                        time.sleep(1)
                                         st.rerun()
-                                    except Exception as e:
-                                        session.rollback()
-                                        st.error(str(e), icon=None)
-                                    finally:
-                                        session.close()
 
-                        st.markdown("---")
-                        historico = carregar_dados_tabela(f"""
-                            SELECT
-                                s.data_inicio, s.data_fim, s.ativo,
-                                vp.placa AS principal, vr.placa AS reserva,
-                                c.cliente, s.usuario_lancamento
-                            FROM substituicoes_contrato s
-                            INNER JOIN contratos c ON c.id = s.contrato_id
-                            INNER JOIN veiculos vp ON vp.id = s.veiculo_principal_id
-                            INNER JOIN veiculos vr ON vr.id = s.veiculo_substituto_id
-                            WHERE s.empresa_id = {emp_id}
-                            ORDER BY s.data_inicio DESC, s.id DESC
-                        """, emp_id)
-                        if not historico.empty:
-                            historico["data_inicio"] = pd.to_datetime(historico["data_inicio"], errors="coerce").dt.strftime("%d/%m/%Y")
-                            historico["data_fim"] = pd.to_datetime(historico["data_fim"], errors="coerce").dt.strftime("%d/%m/%Y").fillna("—")
-                            historico["status"] = historico["ativo"].apply(lambda x: "Em andamento" if x == 1 else "Encerrada")
-                            st.markdown("**Histórico de substituições**")
-                            st.dataframe(
-                                historico[["cliente", "principal", "reserva", "data_inicio", "data_fim", "status", "usuario_lancamento"]].rename(columns={
-                                    "cliente": "Cliente", "principal": "Principal", "reserva": "Reserva",
-                                    "data_inicio": "Início", "data_fim": "Fim", "status": "Status",
-                                    "usuario_lancamento": "Responsável"
-                                }),
-                                use_container_width=True, hide_index=True
-                            )
+                                except Exception as e:
+                                    session.rollback()
+                                    st.error(
+                                        f"Não foi possível excluir o contrato: {e}",
+                                        icon=None
+                                    )
+                                finally:
+                                    session.close()
+                else:
+                    st.info(
+                        "O módulo não localizou apólices para manutenção.",
+                        icon=None
+                    )
 
+        # ══════════════════════════════════════════════════════════════════════════
         # MEU PERFIL (NOVO)
         # ══════════════════════════════════════════════════════════════════════════
         elif tela_ativa == "Meu Perfil":
