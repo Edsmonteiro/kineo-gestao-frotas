@@ -57,17 +57,14 @@ html, body, [class*="css"] {{
     visibility: hidden; 
 }}
 
-/* Remove o cabeçalho superior do Streamlit (some com o barquinho, share e ícone do GitHub) */
 header[data-testid="stHeader"] {{ 
     display: none !important; 
 }}
 
-/* Remove o ícone de âncora de link dos títulos */
 a.header-anchor {{
     display: none !important;
 }}
 
-/* ── Fundo Geral com Pattern (Pontilhados Elegantes) ── */
 [data-testid="stAppViewContainer"] {{ 
     background-color: #F8FAFC !important;
     background-image: radial-gradient(#CBD5E1 1px, transparent 1px) !important;
@@ -79,16 +76,10 @@ a.header-anchor {{
     max-width: 1280px; 
 }}
 
-/* ========================================================================== */
-/* ── HOVER SIDEBAR (BASE & DINÂMICA) ── */
-/* ========================================================================== */
-
-/* Ocultar o botão nativo de encolher a sidebar */
 [data-testid="stSidebarCollapseButton"] {{ 
     display: none !important; 
 }}
 
-/* Configuração Base da Sidebar */
 [data-testid="stSidebar"] {{
     background-color: #0B1120 !important;
     border-right: none !important;
@@ -102,25 +93,22 @@ a.header-anchor {{
     z-index: 999999 !important;
 }}
 
-/* Ajuste do container principal para não ficar sob a barra */
 [data-testid="stAppViewContainer"] > section.main {{
     padding-left: 82px !important;
 }}
 
-/* Flexbox para estrutura fluida - Garante que botões desçam */
 [data-testid="stSidebar"] .stScrollToBottomContainer > div:first-child {{
     display: flex;
     flex-direction: column;
     min-height: 100vh;
 }}
 
-/* ── Estilo da Logo ── */
 .sidebar-brand-wrapper {{
     display: flex;
     align-items: center;
     gap: 16px;
-    margin-left: -16px; /* Anula o padding nativo de 16px do Streamlit */
-    padding-left: 17px; /* 17+48+17=82px */
+    margin-left: -16px; 
+    padding-left: 17px; 
     width: {SIDEBAR_WIDTH}; 
     margin-bottom: 1rem;
     padding-top: 1.5rem;
@@ -167,7 +155,6 @@ a.header-anchor {{
     font-size: 0.75rem; 
 }}
 
-/* ── Estilo Base dos Botões da Sidebar ── */
 [data-testid="stSidebar"] .stButton > button {{
     width: {BUTTON_WIDTH} !important;
     min-width: 48px !important;
@@ -178,7 +165,7 @@ a.header-anchor {{
     align-items: center; 
     justify-content: flex-start;
     padding-left: 12px !important;
-    margin-left: 1px !important; /* 16 nativo + 1 = 17px para alinhar com a logo */
+    margin-left: 1px !important; 
     margin-bottom: 8px !important;
     overflow: hidden; 
     white-space: nowrap;
@@ -206,17 +193,15 @@ a.header-anchor {{
     font-weight: 500 !important; 
 }}
 
-/* Botão Ativo */
 [data-testid="stSidebar"] .stButton > button[kind="primary"] {{
     background-color: #1E293B !important; 
     color: #FFFFFF !important;
     border-left: 4px solid #6366F1 !important; 
     border-radius: 0 8px 8px 0 !important; 
-    margin-left: -16px !important; /* Cola na borda esquerda */
-    padding-left: 29px !important; /* Compensa a margem (12+17=29) */
+    margin-left: -16px !important; 
+    padding-left: 29px !important; 
 }}
 
-/* ── RODAPÉ E PERFIL ── */
 .profile-wrapper {{
     position: fixed;
     bottom: 0; 
@@ -272,14 +257,11 @@ a.header-anchor {{
     color: #94A3B8; 
 }}
 
-/* ── BOTÕES INVISÍVEIS E FLUTUANTES DO RODAPÉ (MATEMÁTICA CORRIGIDA) ── */
-
-/* Botão invisível do Perfil (Card Pílula Perfeito) */
 [data-testid="stSidebar"] [data-testid="stVerticalBlock"] > div:nth-last-child(2) button {{
     position: fixed !important; 
-    bottom: 10px !important; /* Centraliza a pílula de 60px no rodapé de 80px */
-    left: 11px !important;   /* Cria exatos 6px de padding envolta da foto que está no 17px */
-    width: 60px !important;  /* Envolve apenas a foto na versão fechada */
+    bottom: 10px !important; 
+    left: 11px !important;   
+    width: 60px !important;  
     height: 60px !important; 
     background: transparent !important;
     border: none !important;
@@ -294,18 +276,17 @@ a.header-anchor {{
 }}
 
 [data-testid="stSidebar"] [data-testid="stVerticalBlock"] > div:nth-last-child(2) button * {{
-    display: none !important; /* Extermina textos residuais */
+    display: none !important; 
 }}
 
 [data-testid="stSidebar"] [data-testid="stVerticalBlock"] > div:nth-last-child(2) button:hover {{
-    background-color: rgba(255, 255, 255, 0.08) !important; /* Retorno visual premium */
+    background-color: rgba(255, 255, 255, 0.08) !important; 
 }}
 
-/* Botão de Sair Flutuante */
 [data-testid="stSidebar"] [data-testid="stVerticalBlock"] > div:nth-last-child(1) button {{
     position: fixed !important; 
-    bottom: 20px !important; /* Centralizado perfeitamente com os 40px de altura */
-    left: 204px !important;  /* Fica à direita da pílula de perfil */
+    bottom: 20px !important; 
+    left: 204px !important;  
     width: 40px !important; 
     min-width: 40px !important; 
     height: 40px !important;
@@ -333,10 +314,6 @@ a.header-anchor {{
     font-size: 1.5rem !important;
 }}
 
-/* ========================================================================== */
-/* ── ESTADOS DE HOVER (EXPANSÃO) ── */
-/* ========================================================================== */
-
 [data-testid="stSidebar"]:hover {{
     width: 260px !important; 
     min-width: 260px !important; 
@@ -353,13 +330,11 @@ a.header-anchor {{
     width: 260px !important;
 }}
 
-/* Expansão da pílula do perfil (limitada para não cobrir o Sair) */
 [data-testid="stSidebar"]:hover [data-testid="stVerticalBlock"] > div:nth-last-child(2) button,
 .sidebar-pinned[data-testid="stSidebar"] [data-testid="stVerticalBlock"] > div:nth-last-child(2) button {{
-    width: 180px !important; /* Para antes do Sair */
+    width: 180px !important; 
 }}
 
-/* Revela textos no Hover */
 [data-testid="stSidebar"]:hover .sidebar-brand-text, 
 [data-testid="stSidebar"]:hover .profile-text, 
 [data-testid="stSidebar"]:hover .stButton > button p {{
@@ -367,7 +342,6 @@ a.header-anchor {{
     visibility: visible !important;
 }}
 
-/* Revela Botão de Sair no Hover */
 [data-testid="stSidebar"]:hover [data-testid="stVerticalBlock"] > div:nth-last-child(1) button,
 .sidebar-pinned[data-testid="stSidebar"] [data-testid="stVerticalBlock"] > div:nth-last-child(1) button {{
     opacity: 1 !important; 
@@ -375,12 +349,8 @@ a.header-anchor {{
 }}
 
 [data-testid="stSidebar"] [data-testid="stVerticalBlock"] > div:nth-last-child(1) button:hover {{
-    background: rgba(239, 68, 68, 0.15) !important; /* Fundo avermelhado sutil */
+    background: rgba(239, 68, 68, 0.15) !important; 
 }}
-
-/* ========================================================================== */
-/* ── COMPONENTES INTERNOS ── */
-/* ========================================================================== */
 
 [data-testid="stVerticalBlockBorderWrapper"] {{ 
     background: #FFFFFF !important; 
@@ -437,7 +407,6 @@ label {{
     color: #374151 !important; 
 }}
 
-/* Botões do Corpo Principal */
 .main .stButton > button {{ 
     background: #6366F1 !important; 
     color: #FFFFFF !important; 
@@ -466,7 +435,6 @@ label {{
     transform: none !important; 
 }}
 
-/* Elementos de layout */
 [data-testid="stTabs"] [data-baseweb="tab-list"] {{ 
     border-bottom: 2px solid #E5E7EB; 
 }}
@@ -530,7 +498,12 @@ label {{
 st.markdown(css_template, unsafe_allow_html=True)
 
 
-# ─── HELPERS ─────────────────────────────────────────────────────────────────
+# ─── HELPERS & CACHE DE CONSULTAS (OTIMIZAÇÃO DE PERFORMANCE) ───────────────
+@st.cache_data(ttl=60)
+def carregar_dados_tabela(query, empresa_id):
+    """Função otimizada com cache do Streamlit para agilizar a navegação entre telas."""
+    return pd.read_sql(query, engine)
+
 @st.cache_data
 def convert_df_to_csv(df):
     return df.to_csv(index=False, sep=';', decimal=',').encode('utf-8-sig')
@@ -792,13 +765,14 @@ else:
         # Espaço protetor estrito para acomodar exatamente a altura do perfil sem gerar scroll
         st.markdown('<div style="height: 85px;"></div>', unsafe_allow_html=True)
 
-        # Renderização do Avatar do Usuário (Rodapé HTML)
+        # Renderização do Avatar do Usuário (Rodapé HTML - Sem Placeholder)
         if os.path.exists(avatar_path):
             with open(avatar_path, "rb") as image_file:
                 encoded_avatar = base64.b64encode(image_file.read()).decode()
             avatar_html = f'<img src="data:image/png;base64,{encoded_avatar}" class="profile-avatar" style="object-fit: cover;">'
         else:
-            avatar_html = f'<div class="profile-avatar">{st.session_state["nome"][0].upper()}</div>'
+            letra_inicial = st.session_state["nome"][0].upper() if st.session_state.get("nome") else "U"
+            avatar_html = f'<div class="profile-avatar">{letra_inicial}</div>'
 
         st.markdown(f"""
         <div class="profile-wrapper">
@@ -840,18 +814,18 @@ else:
             mes_atual_str = hoje.strftime("%m/%Y")
             limite_dias   = hoje + timedelta(days=15)
 
-            df_status    = pd.read_sql(f"SELECT status, count(id) as qtd FROM veiculos WHERE empresa_id={emp_id} GROUP BY status", engine)
-            df_custos    = pd.read_sql(f"SELECT data_custo, categoria, valor_total FROM custos WHERE empresa_id={emp_id}", engine)
-            df_cobrancas = pd.read_sql(f"SELECT mes_ano, valor_previsto, status, vencimento FROM cobrancas_mensais WHERE empresa_id={emp_id}", engine)
+            df_status    = carregar_dados_tabela(f"SELECT status, count(id) as qtd FROM veiculos WHERE empresa_id={emp_id} GROUP BY status", emp_id)
+            df_custos    = carregar_dados_tabela(f"SELECT data_custo, categoria, valor_total FROM custos WHERE empresa_id={emp_id}", emp_id)
+            df_cobrancas = carregar_dados_tabela(f"SELECT mes_ano, valor_previsto, status, vencimento FROM cobrancas_mensais WHERE empresa_id={emp_id}", emp_id)
 
             # ── Alertas ──────────────────────────────────────────────────────────
             alertas = []
             
-            df_cont = pd.read_sql(f"""
+            df_cont = carregar_dados_tabela(f"""
                 SELECT v.placa, c.cliente, c.data_fim
                 FROM contratos c JOIN veiculos v ON c.veiculo_id=v.id
                 WHERE c.empresa_id={emp_id} AND c.ativo=1 AND c.data_fim IS NOT NULL
-            """, engine)
+            """, emp_id)
             
             if not df_cont.empty:
                 df_cont["data_fim"] = pd.to_datetime(df_cont["data_fim"]).dt.date
@@ -859,12 +833,12 @@ else:
                     dias = (r["data_fim"] - hoje).days
                     alertas.append(f"Contrato de **{r['placa']}** ({r['cliente']}) encerra em **{dias} dia(s)**.")
 
-            df_v_km = pd.read_sql(f"SELECT id, placa, km_atual FROM veiculos WHERE empresa_id={emp_id} AND km_atual>0", engine)
+            df_v_km = carregar_dados_tabela(f"SELECT id, placa, km_atual FROM veiculos WHERE empresa_id={emp_id} AND km_atual>0", emp_id)
             
-            df_manu = pd.read_sql(f"""
+            df_manu = carregar_dados_tabela(f"""
                 SELECT veiculo_id, MAX(km_momento) as ultimo_km FROM custos
                 WHERE empresa_id={emp_id} AND categoria='Manutenção Preventiva' GROUP BY veiculo_id
-            """, engine)
+            """, emp_id)
             
             for _, v in df_v_km.iterrows():
                 ultimo_km = 0
@@ -1003,7 +977,7 @@ else:
         elif tela_ativa == "Gestão de Frota":
             page_header("Gestão de Frota", "Cadastro, saúde e análise de gastos por veículo.")
 
-            df_veiculos = pd.read_sql(f"SELECT * FROM veiculos WHERE empresa_id={emp_id}", engine)
+            df_veiculos = carregar_dados_tabela(f"SELECT * FROM veiculos WHERE empresa_id={emp_id}", emp_id)
             total = len(df_veiculos)
 
             c1, c2, c3, c4 = st.columns(4)
@@ -1141,7 +1115,7 @@ else:
                 if total == 0:
                     st.info("Nenhum veículo cadastrado.", icon=None) 
                 else:
-                    df_custos_all = pd.read_sql(f"SELECT * FROM custos WHERE empresa_id={emp_id}", engine)
+                    df_custos_all = carregar_dados_tabela(f"SELECT * FROM custos WHERE empresa_id={emp_id}", emp_id)
                     
                     if df_custos_all.empty:
                         st.info("Nenhum custo registrado.", icon=None)
@@ -1235,7 +1209,7 @@ else:
                         csv_f = convert_df_to_csv(df_veiculos[["placa", "modelo", "km_atual", "status"]])
                         st.download_button("Exportar frota", csv_f, "frota.csv", "text/csv", use_container_width=True)
 
-                    df_custos_all = pd.read_sql(f"SELECT * FROM custos WHERE empresa_id={emp_id}", engine)
+                    df_custos_all = carregar_dados_tabela(f"SELECT * FROM custos WHERE empresa_id={emp_id}", emp_id)
                     saude = []
                     
                     for _, v in df_veiculos.iterrows():
@@ -1292,7 +1266,7 @@ else:
         elif tela_ativa == "Gestão de Custos":
             page_header("Gestão de Custos", "Registre e acompanhe todas as despesas da frota.")
 
-            df_veiculos = pd.read_sql(f"SELECT id, placa, modelo FROM veiculos WHERE empresa_id={emp_id}", engine)
+            df_veiculos = carregar_dados_tabela(f"SELECT id, placa, modelo FROM veiculos WHERE empresa_id={emp_id}", emp_id)
             if df_veiculos.empty:
                 st.warning("Cadastre ao menos um veículo antes de registrar custos.", icon=None)
             else:
@@ -1380,11 +1354,11 @@ else:
 
                 if st.session_state["perfil"] == "admin":
                     with st.expander("Excluir registro financeiro"):
-                        df_ex = pd.read_sql(f"""
+                        df_ex = carregar_dados_tabela(f"""
                             SELECT c.id, c.data_custo, v.placa, c.categoria, c.valor_total 
                             FROM custos c JOIN veiculos v ON c.veiculo_id=v.id 
                             WHERE c.empresa_id={emp_id} ORDER BY c.data_custo DESC
-                        """, engine)
+                        """, emp_id)
                         
                         if not df_ex.empty:
                             opcoes_c = {f"{pd.to_datetime(r['data_custo']).strftime('%d/%m/%Y')} · {r['placa']} · {r['categoria']} ({fmt_brl(r['valor_total'])})": r["id"] for _, r in df_ex.iterrows()}
@@ -1398,14 +1372,14 @@ else:
                                 st.rerun()
 
                 # Tabela de custos
-                df_custos = pd.read_sql(f"""
+                df_custos = carregar_dados_tabela(f"""
                     SELECT c.id, c.data_custo as Data, v.placa as Placa, c.categoria as Categoria,
                            c.descricao as Descrição, c.valor_total as Valor,
                            c.forma_pagamento, c.condicao_pagamento, c.parcelas,
                            c.motorista as Motorista, c.comprovante
                     FROM custos c JOIN veiculos v ON c.veiculo_id=v.id
                     WHERE c.empresa_id={emp_id} ORDER BY c.data_custo DESC
-                """, engine)
+                """, emp_id)
 
                 if not df_custos.empty:
                     df_custos["Data"] = pd.to_datetime(df_custos["Data"]).dt.strftime("%d/%m/%Y")
@@ -1483,7 +1457,7 @@ else:
                     else:     
                         st.info("Grade já atualizada com as recorrências ativas.", icon=None)
 
-                df_mensal = pd.read_sql(f"SELECT * FROM cobrancas_mensais WHERE empresa_id={emp_id} AND mes_ano='{mes_sel}'", engine)
+                df_mensal = carregar_dados_tabela(f"SELECT * FROM cobrancas_mensais WHERE empresa_id={emp_id} AND mes_ano='{mes_sel}'", emp_id)
 
                 if df_mensal.empty:
                     with st.container(border=True): 
@@ -1590,7 +1564,7 @@ else:
                             st.success("Motor alimentado.")
                             st.rerun()
 
-                df_rec_all = pd.read_sql(f"SELECT cliente, forma_cobranca, valor_mensal, data_base_emissao, data_base_vencimento, observacoes FROM cobrancas_recorrentes WHERE empresa_id={emp_id}", engine)
+                df_rec_all = carregar_dados_tabela(f"SELECT cliente, forma_cobranca, valor_mensal, data_base_emissao, data_base_vencimento, observacoes FROM cobrancas_recorrentes WHERE empresa_id={emp_id}", emp_id)
                 
                 if not df_rec_all.empty:
                     st.dataframe(df_rec_all.rename(columns={
@@ -1604,13 +1578,13 @@ else:
         elif tela_ativa == "Contratos e Locação":
             page_header("Gestão de Contratos", "Controle o ciclo de vida comercial da frota.")
 
-            df_veiculos = pd.read_sql(f"SELECT id, placa, modelo FROM veiculos WHERE empresa_id={emp_id}", engine)
+            df_veiculos = carregar_dados_tabela(f"SELECT id, placa, modelo FROM veiculos WHERE empresa_id={emp_id}", emp_id)
             
             tab_visao, tab_novo, tab_editar = st.tabs(["Painel Comercial", "Abertura de Contrato", "Finalização / Aditivos"])
             
             # ── Aba 1: Visão Geral ────────────────────────────────────────────────
             with tab_visao:
-                df_contratos = pd.read_sql(f"""
+                df_contratos = carregar_dados_tabela(f"""
                     SELECT c.id, c.cliente as Cliente, c.cnpj as CNPJ, v.placa as Placa, 
                            c.ativo, c.data_inicio as Início, c.data_fim as Fim, 
                            c.tipo_valor as Tipo, c.valor_mensal as Valor, 
@@ -1618,7 +1592,7 @@ else:
                            c.usuario_lancamento as 'Criado por'
                     FROM contratos c JOIN veiculos v ON c.veiculo_id = v.id 
                     WHERE c.empresa_id = {emp_id} ORDER BY c.ativo DESC, c.data_inicio DESC
-                """, engine)
+                """, emp_id)
                 
                 if not df_contratos.empty:
                     df_contratos['Início'] = pd.to_datetime(df_contratos['Início']).dt.strftime('%d/%m/%Y')
@@ -1869,7 +1843,7 @@ else:
                 tab_users, tab_logo = st.tabs(["Controle de Acessos", "Branding Institucional"])
 
                 with tab_users:
-                    df_users = pd.read_sql(f"SELECT id, nome, login, perfil FROM usuarios WHERE empresa_id={emp_id}", engine)
+                    df_users = carregar_dados_tabela(f"SELECT id, nome, login, perfil FROM usuarios WHERE empresa_id={emp_id}", emp_id)
                     st.dataframe(df_users.rename(columns={"nome": "Nome", "login": "Login", "perfil": "Perfil"}).drop(columns=["id"]), use_container_width=True, hide_index=True)
 
                     sub1, sub2, sub3 = st.tabs(["Nova Credencial", "Gestão de Credencial", "Reset de Fator"])
