@@ -56,7 +56,14 @@ class Veiculo(Base):
     id = Column(Integer, primary_key=True, index=True)
     empresa_id = Column(Integer, default=1)
     placa = Column(String, unique=True, nullable=False)
+    fabricante = Column(String, nullable=True)
     modelo = Column(String, nullable=False)
+    ano_modelo = Column(Integer, nullable=True)
+    versao = Column(String, nullable=True)
+    motorizacao = Column(String, nullable=True)
+    combustivel = Column(String, nullable=True)
+    transmissao = Column(String, nullable=True)
+    plano_manutencao_id = Column(Integer, nullable=True)
     km_atual = Column(Float, default=0.0)
     status = Column(String, default="Disponível")
 
@@ -107,6 +114,48 @@ class Custo(Base):
     parcelas = Column(Integer, default=1)
     motorista = Column(String, nullable=True)
     comprovante = Column(String, nullable=True)
+    tipo_manutencao = Column(String, nullable=True)
+    plano_item_id = Column(Integer, nullable=True)
+
+class PlanoManutencao(Base):
+    __tablename__ = "planos_manutencao"
+    id = Column(Integer, primary_key=True, index=True)
+    empresa_id = Column(Integer, default=1)
+    nome = Column(String, nullable=False)
+    fabricante = Column(String, nullable=True)
+    modelo = Column(String, nullable=True)
+    ano_modelo = Column(Integer, nullable=True)
+    versao = Column(String, nullable=True)
+    motorizacao = Column(String, nullable=True)
+    combustivel = Column(String, nullable=True)
+    transmissao = Column(String, nullable=True)
+    ativo = Column(Integer, default=1)
+
+class ItemPlanoManutencao(Base):
+    __tablename__ = "itens_plano_manutencao"
+    id = Column(Integer, primary_key=True, index=True)
+    empresa_id = Column(Integer, default=1)
+    plano_id = Column(Integer, nullable=False)
+    codigo_servico = Column(String, nullable=True)
+    tipo_manutencao = Column(String, nullable=False)
+    descricao = Column(String, nullable=True)
+    intervalo_fabricante_km = Column(Float, nullable=True)
+    intervalo_fabricante_meses = Column(Integer, nullable=True)
+    intervalo_empresa_km = Column(Float, nullable=True)
+    intervalo_empresa_meses = Column(Integer, nullable=True)
+    ativo = Column(Integer, default=1)
+
+class ManutencaoRealizada(Base):
+    __tablename__ = "manutencoes_realizadas"
+    id = Column(Integer, primary_key=True, index=True)
+    empresa_id = Column(Integer, default=1)
+    veiculo_id = Column(Integer, nullable=False)
+    plano_item_id = Column(Integer, nullable=False)
+    custo_id = Column(Integer, nullable=True)
+    data_execucao = Column(Date, nullable=True)
+    km_execucao = Column(Float, nullable=True)
+    observacoes = Column(String, nullable=True)
+    origem = Column(String, default="Manual")
 
 class CobrancaRecorrente(Base):
     __tablename__ = "cobrancas_recorrentes"
@@ -198,8 +247,53 @@ def garantir_colunas_substituicoes():
         for nome, tipo in faltantes.items():
             conn.execute(text(f'ALTER TABLE substituicoes_contrato ADD COLUMN "{nome}" {tipo}'))
 
+def garantir_colunas_veiculos():
+    """Adiciona os metadados usados para associar veículos a planos de manutenção."""
+    inspector = inspect(engine)
+    if "veiculos" not in inspector.get_table_names():
+        Base.metadata.create_all(bind=engine)
+        return
+
+    existentes = {c["name"] for c in inspector.get_columns("veiculos")}
+    necessarias = {
+        "fabricante": "VARCHAR",
+        "ano_modelo": "INTEGER",
+        "versao": "VARCHAR",
+        "motorizacao": "VARCHAR",
+        "combustivel": "VARCHAR",
+        "transmissao": "VARCHAR",
+        "plano_manutencao_id": "INTEGER",
+    }
+
+    with engine.begin() as conn:
+        for nome, tipo in necessarias.items():
+            if nome not in existentes:
+                conn.execute(text(f'ALTER TABLE veiculos ADD COLUMN "{nome}" {tipo}'))
+
+
+def garantir_colunas_custos():
+    """Mantém custos antigos compatíveis com o vínculo estruturado de manutenção."""
+    inspector = inspect(engine)
+    if "custos" not in inspector.get_table_names():
+        Base.metadata.create_all(bind=engine)
+        return
+
+    existentes = {c["name"] for c in inspector.get_columns("custos")}
+    necessarias = {
+        "tipo_manutencao": "VARCHAR",
+        "plano_item_id": "INTEGER",
+    }
+
+    with engine.begin() as conn:
+        for nome, tipo in necessarias.items():
+            if nome not in existentes:
+                conn.execute(text(f'ALTER TABLE custos ADD COLUMN "{nome}" {tipo}'))
+
+
 garantir_colunas_contratos()
 garantir_colunas_substituicoes()
+garantir_colunas_veiculos()
+garantir_colunas_custos()
 
 def inicializar_dados():
     session = SessionLocal()

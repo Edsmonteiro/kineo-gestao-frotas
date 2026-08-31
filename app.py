@@ -2,7 +2,10 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
-from database import engine, SessionLocal, Veiculo, Contrato, SubstituicaoContrato, Custo, Usuario, Empresa, CobrancaRecorrente, CobrancaMensal
+from database import (
+    engine, SessionLocal, Veiculo, Contrato, SubstituicaoContrato, Custo, Usuario, Empresa,
+    CobrancaRecorrente, CobrancaMensal, PlanoManutencao, ItemPlanoManutencao, ManutencaoRealizada
+)
 from datetime import date, timedelta
 import calendar
 import os
@@ -10,6 +13,7 @@ import uuid
 import bcrypt
 import time
 import base64
+from io import BytesIO
 
 # ─── DIRETÓRIOS ──────────────────────────────────────────────────────────────
 for pasta in ["comprovantes", "logos"]:
@@ -620,6 +624,363 @@ def page_header(title: str, subtitle: str = ""):
 def fmt_brl(valor: float) -> str:
     return f"R$ {valor:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
 
+def _texto_planilha(valor):
+    if valor is None or (isinstance(valor, float) and pd.isna(valor)):
+        return ""
+    return str(valor).strip()
+
+
+def _numero_planilha(valor, inteiro=False):
+    if valor is None or (isinstance(valor, float) and pd.isna(valor)) or str(valor).strip() == "":
+        return None
+    try:
+        if isinstance(valor, str):
+            texto = valor.strip().replace(" ", "")
+            if "," in texto and "." in texto:
+                texto = texto.replace(".", "").replace(",", ".")
+            elif "," in texto:
+                texto = texto.replace(",", ".")
+            elif texto.count(".") == 1:
+                esquerda, direita = texto.split(".")
+                if direita.isdigit() and len(direita) == 3 and esquerda.replace("-", "").isdigit():
+                    texto = esquerda + direita
+            numero = float(texto)
+        else:
+            numero = float(valor)
+        return int(numero) if inteiro else numero
+    except Exception:
+        return None
+
+
+def _nome_plano_padrao(row):
+    partes = [
+        _texto_planilha(row.get("fabricante")),
+        _texto_planilha(row.get("modelo")),
+        _texto_planilha(row.get("ano_modelo")),
+        _texto_planilha(row.get("motorizacao")),
+    ]
+    partes = [p for p in partes if p and p.upper() != "NAN"]
+    return "Plano " + " ".join(partes) if partes else "Plano de manutenção"
+
+
+def _intervalo_efetivo(valor_empresa, valor_fabricante):
+    empresa = _numero_planilha(valor_empresa)
+    fabricante = _numero_planilha(valor_fabricante)
+    if empresa is not None and empresa > 0:
+        return empresa
+    if fabricante is not None and fabricante > 0:
+        return fabricante
+    return None
+
+
+def gerar_planilha_planos(df_base):
+    """Gera o modelo XLSX usado tanto na importação individual quanto massiva."""
+    colunas = [
+        "placa", "fabricante", "modelo", "ano_modelo", "versao", "motorizacao",
+        "combustivel", "transmissao", "nome_plano", "codigo_servico",
+        "tipo_manutencao", "descricao_servico", "intervalo_fabricante_km",
+        "intervalo_fabricante_meses", "intervalo_empresa_km", "intervalo_empresa_meses",
+        "ultima_manutencao_km", "ultima_manutencao_data", "observacoes"
+    ]
+    df_saida = df_base.copy()
+    for col in colunas:
+        if col not in df_saida.columns:
+            df_saida[col] = ""
+    df_saida = df_saida[colunas]
+
+    instrucoes = pd.DataFrame({
+        "Campo": [
+            "placa", "nome_plano", "tipo_manutencao", "intervalo_fabricante_km",
+            "intervalo_fabricante_meses", "intervalo_empresa_km", "intervalo_empresa_meses",
+            "ultima_manutencao_km", "ultima_manutencao_data"
+        ],
+        "Orientação": [
+            "Placa existente no Kineo. É a chave do histórico individual do veículo.",
+            "Nome do plano-base. Veículos equivalentes podem usar exatamente o mesmo nome.",
+            "Serviço estruturado, por exemplo: Troca de óleo do motor.",
+            "Intervalo em KM recomendado pelo fabricante.",
+            "Intervalo em meses recomendado pelo fabricante.",
+            "Opcional. Se preenchido, substitui o intervalo de KM do fabricante na operação.",
+            "Opcional. Se preenchido, substitui o intervalo em meses do fabricante.",
+            "KM da última execução conhecida deste serviço para esta placa.",
+            "Data da última execução conhecida. Use DD/MM/AAAA ou uma data válida do Excel."
+        ]
+    })
+
+    buffer = BytesIO()
+    with pd.ExcelWriter(buffer, engine="openpyxl") as writer:
+        df_saida.to_excel(writer, index=False, sheet_name="Planos")
+        instrucoes.to_excel(writer, index=False, sheet_name="Instruções")
+    buffer.seek(0)
+    return buffer.getvalue()
+
+
+def diagnostico_manutencao(empresa_id):
+    """Calcula a situação de cada item de manutenção a partir do plano e do histórico real."""
+    df_v = carregar_dados_tabela(f"""
+        SELECT id, placa, fabricante, modelo, ano_modelo, versao, motorizacao,
+               km_atual, status, plano_manutencao_id
+        FROM veiculos
+        WHERE empresa_id={empresa_id} AND plano_manutencao_id IS NOT NULL
+        ORDER BY modelo, placa
+    """, empresa_id)
+
+    if df_v.empty:
+        return pd.DataFrame()
+
+    df_itens = carregar_dados_tabela(f"""
+        SELECT i.id, i.plano_id, i.codigo_servico, i.tipo_manutencao, i.descricao,
+               i.intervalo_fabricante_km, i.intervalo_fabricante_meses,
+               i.intervalo_empresa_km, i.intervalo_empresa_meses
+        FROM itens_plano_manutencao i
+        WHERE i.empresa_id={empresa_id} AND COALESCE(i.ativo, 1)=1
+    """, empresa_id)
+
+    if df_itens.empty:
+        return pd.DataFrame()
+
+    df_hist = carregar_dados_tabela(f"""
+        SELECT id, veiculo_id, plano_item_id, custo_id, data_execucao, km_execucao, origem
+        FROM manutencoes_realizadas
+        WHERE empresa_id={empresa_id}
+    """, empresa_id)
+
+    registros = []
+    hoje = date.today()
+
+    for _, veiculo in df_v.iterrows():
+        itens = df_itens[df_itens["plano_id"] == veiculo["plano_manutencao_id"]]
+        for _, item in itens.iterrows():
+            hist = df_hist[
+                (df_hist["veiculo_id"] == veiculo["id"]) &
+                (df_hist["plano_item_id"] == item["id"])
+            ] if not df_hist.empty else pd.DataFrame()
+
+            ultima_km = None
+            ultima_data = None
+            if not hist.empty:
+                hist = hist.copy()
+                hist["data_execucao"] = pd.to_datetime(hist["data_execucao"], errors="coerce")
+                hist["km_execucao"] = pd.to_numeric(hist["km_execucao"], errors="coerce")
+                kms_validos = hist["km_execucao"].dropna()
+                datas_validas = hist["data_execucao"].dropna()
+                if not kms_validos.empty:
+                    ultima_km = float(kms_validos.max())
+                if not datas_validas.empty:
+                    ultima_data = datas_validas.max().date()
+
+            intervalo_km = _intervalo_efetivo(item["intervalo_empresa_km"], item["intervalo_fabricante_km"])
+            intervalo_meses = _intervalo_efetivo(item["intervalo_empresa_meses"], item["intervalo_fabricante_meses"])
+            if intervalo_meses is not None:
+                intervalo_meses = int(intervalo_meses)
+
+            km_atual = float(veiculo["km_atual"] or 0)
+            proximo_km = (ultima_km + intervalo_km) if ultima_km is not None and intervalo_km else None
+            proxima_data = add_months(ultima_data, intervalo_meses) if ultima_data and intervalo_meses else None
+            faltam_km = (proximo_km - km_atual) if proximo_km is not None else None
+            faltam_dias = (proxima_data - hoje).days if proxima_data is not None else None
+
+            if ultima_km is None and ultima_data is None:
+                status_item = "SEM HISTÓRICO"
+            else:
+                vencido = ((faltam_km is not None and faltam_km <= 0) or
+                           (faltam_dias is not None and faltam_dias <= 0))
+                limite_proximo_km = max((intervalo_km or 0) * 0.05, 1000) if intervalo_km else None
+                limite_atencao_km = max((intervalo_km or 0) * 0.20, 2000) if intervalo_km else None
+                proximo = ((faltam_km is not None and limite_proximo_km is not None and faltam_km <= limite_proximo_km) or
+                           (faltam_dias is not None and faltam_dias <= 30))
+                atencao = ((faltam_km is not None and limite_atencao_km is not None and faltam_km <= limite_atencao_km) or
+                           (faltam_dias is not None and faltam_dias <= 60))
+                status_item = "VENCIDO" if vencido else ("PRÓXIMO" if proximo else ("ATENÇÃO" if atencao else "OK"))
+
+            registros.append({
+                "veiculo_id": int(veiculo["id"]),
+                "Placa": veiculo["placa"],
+                "Modelo": veiculo["modelo"],
+                "KM Atual": int(km_atual),
+                "Serviço": item["tipo_manutencao"],
+                "Última KM": int(ultima_km) if ultima_km is not None else None,
+                "Última Data": ultima_data,
+                "Próxima KM": int(proximo_km) if proximo_km is not None else None,
+                "Próxima Data": proxima_data,
+                "Faltam KM": int(faltam_km) if faltam_km is not None else None,
+                "Faltam Dias": int(faltam_dias) if faltam_dias is not None else None,
+                "Status": status_item,
+                "plano_item_id": int(item["id"]),
+            })
+
+    return pd.DataFrame(registros)
+
+
+def processar_planilha_planos(df_import, empresa_id, usuario, veiculo_id_forcado=None):
+    """Cria/atualiza planos-base, itens e históricos iniciais sem duplicar execuções iguais."""
+    df = df_import.copy()
+    df.columns = [str(c).strip().lower() for c in df.columns]
+    obrigatorias = ["placa", "nome_plano", "tipo_manutencao"]
+    faltantes = [c for c in obrigatorias if c not in df.columns]
+    if faltantes:
+        raise ValueError("Colunas obrigatórias ausentes: " + ", ".join(faltantes))
+
+    session = SessionLocal()
+    planos_tocados = set()
+    itens_criados = 0
+    historicos_criados = 0
+    veiculos_vinculados = set()
+    ignorados = []
+
+    try:
+        for idx, row in df.iterrows():
+            placa = _texto_planilha(row.get("placa")).upper()
+            tipo = _texto_planilha(row.get("tipo_manutencao"))
+            if not placa or placa == "NAN" or not tipo or tipo.upper() == "NAN":
+                ignorados.append(f"Linha {idx + 2}: placa ou tipo de manutenção vazio")
+                continue
+
+            if veiculo_id_forcado:
+                veiculo = session.query(Veiculo).filter(
+                    Veiculo.id == veiculo_id_forcado,
+                    Veiculo.empresa_id == empresa_id
+                ).first()
+                if veiculo and veiculo.placa.upper() != placa:
+                    ignorados.append(f"Linha {idx + 2}: placa diferente do veículo selecionado")
+                    continue
+            else:
+                veiculo = session.query(Veiculo).filter(
+                    Veiculo.empresa_id == empresa_id,
+                    Veiculo.placa == placa
+                ).first()
+
+            if not veiculo:
+                ignorados.append(f"Linha {idx + 2}: veículo {placa} não encontrado")
+                continue
+
+            nome_plano = _texto_planilha(row.get("nome_plano")) or _nome_plano_padrao(row)
+            plano = session.query(PlanoManutencao).filter(
+                PlanoManutencao.empresa_id == empresa_id,
+                PlanoManutencao.nome == nome_plano
+            ).first()
+
+            if plano is None:
+                plano = PlanoManutencao(
+                    empresa_id=empresa_id,
+                    nome=nome_plano,
+                    fabricante=_texto_planilha(row.get("fabricante")) or veiculo.fabricante,
+                    modelo=_texto_planilha(row.get("modelo")) or veiculo.modelo,
+                    ano_modelo=_numero_planilha(row.get("ano_modelo"), inteiro=True) or veiculo.ano_modelo,
+                    versao=_texto_planilha(row.get("versao")) or veiculo.versao,
+                    motorizacao=_texto_planilha(row.get("motorizacao")) or veiculo.motorizacao,
+                    combustivel=_texto_planilha(row.get("combustivel")) or veiculo.combustivel,
+                    transmissao=_texto_planilha(row.get("transmissao")) or veiculo.transmissao,
+                    ativo=1
+                )
+                session.add(plano)
+                session.flush()
+            else:
+                for attr, col in [
+                    ("fabricante", "fabricante"), ("modelo", "modelo"), ("versao", "versao"),
+                    ("motorizacao", "motorizacao"), ("combustivel", "combustivel"), ("transmissao", "transmissao")
+                ]:
+                    novo = _texto_planilha(row.get(col))
+                    if novo and novo.upper() != "NAN":
+                        setattr(plano, attr, novo)
+                ano = _numero_planilha(row.get("ano_modelo"), inteiro=True)
+                if ano:
+                    plano.ano_modelo = ano
+
+            # Enriquece também o cadastro do veículo com os dados da planilha.
+            for attr, col in [
+                ("fabricante", "fabricante"), ("versao", "versao"), ("motorizacao", "motorizacao"),
+                ("combustivel", "combustivel"), ("transmissao", "transmissao")
+            ]:
+                novo = _texto_planilha(row.get(col))
+                if novo and novo.upper() != "NAN":
+                    setattr(veiculo, attr, novo)
+            ano = _numero_planilha(row.get("ano_modelo"), inteiro=True)
+            if ano:
+                veiculo.ano_modelo = ano
+
+            veiculo.plano_manutencao_id = plano.id
+            planos_tocados.add(plano.id)
+            veiculos_vinculados.add(veiculo.id)
+
+            # Uma linha sem serviço ainda é útil: ela vincula a placa a um plano-base
+            # já cadastrado por outro veículo equivalente.
+            if not tipo or tipo.upper() == "NAN":
+                continue
+
+            codigo = _texto_planilha(row.get("codigo_servico"))
+            item_query = session.query(ItemPlanoManutencao).filter(
+                ItemPlanoManutencao.empresa_id == empresa_id,
+                ItemPlanoManutencao.plano_id == plano.id
+            )
+            if codigo and codigo.upper() != "NAN":
+                item = item_query.filter(ItemPlanoManutencao.codigo_servico == codigo).first()
+            else:
+                item = item_query.filter(ItemPlanoManutencao.tipo_manutencao == tipo).first()
+
+            if item is None:
+                item = ItemPlanoManutencao(
+                    empresa_id=empresa_id,
+                    plano_id=plano.id,
+                    codigo_servico=codigo or None,
+                    tipo_manutencao=tipo,
+                    ativo=1
+                )
+                session.add(item)
+                session.flush()
+                itens_criados += 1
+
+            item.descricao = _texto_planilha(row.get("descricao_servico")) or item.descricao
+            item.intervalo_fabricante_km = _numero_planilha(row.get("intervalo_fabricante_km"))
+            item.intervalo_fabricante_meses = _numero_planilha(row.get("intervalo_fabricante_meses"), inteiro=True)
+            item.intervalo_empresa_km = _numero_planilha(row.get("intervalo_empresa_km"))
+            item.intervalo_empresa_meses = _numero_planilha(row.get("intervalo_empresa_meses"), inteiro=True)
+            item.ativo = 1
+
+            km_ultima = _numero_planilha(row.get("ultima_manutencao_km"))
+            data_ultima = row.get("ultima_manutencao_data")
+            if data_ultima is not None and not (isinstance(data_ultima, float) and pd.isna(data_ultima)) and str(data_ultima).strip():
+                data_ultima = pd.to_datetime(data_ultima, dayfirst=True, errors="coerce")
+                data_ultima = data_ultima.date() if pd.notna(data_ultima) else None
+            else:
+                data_ultima = None
+
+            if km_ultima is not None or data_ultima is not None:
+                existente = session.query(ManutencaoRealizada).filter(
+                    ManutencaoRealizada.empresa_id == empresa_id,
+                    ManutencaoRealizada.veiculo_id == veiculo.id,
+                    ManutencaoRealizada.plano_item_id == item.id,
+                    ManutencaoRealizada.km_execucao == km_ultima,
+                    ManutencaoRealizada.data_execucao == data_ultima,
+                    ManutencaoRealizada.origem == "Importação"
+                ).first()
+                if existente is None:
+                    session.add(ManutencaoRealizada(
+                        empresa_id=empresa_id,
+                        veiculo_id=veiculo.id,
+                        plano_item_id=item.id,
+                        custo_id=None,
+                        data_execucao=data_ultima,
+                        km_execucao=km_ultima,
+                        observacoes=_texto_planilha(row.get("observacoes")) or None,
+                        origem="Importação"
+                    ))
+                    historicos_criados += 1
+
+        session.commit()
+        return {
+            "planos": len(planos_tocados),
+            "itens_novos": itens_criados,
+            "historicos_novos": historicos_criados,
+            "veiculos": len(veiculos_vinculados),
+            "ignorados": ignorados,
+        }
+    except Exception:
+        session.rollback()
+        raise
+    finally:
+        session.close()
+
 def obter_contrato_ativo_do_principal(session, empresa_id, veiculo_id):
     return session.query(Contrato).filter(
         Contrato.empresa_id == empresa_id,
@@ -1183,32 +1544,59 @@ else:
             if inadimplencia_qtd:
                 alertas.append(("Cobranças vencidas", f"{inadimplencia_qtd} cobrança(s) estão pendentes e vencidas."))
 
-            df_v_km = carregar_dados_tabela(f"""
-                SELECT id, placa, km_atual
-                FROM veiculos
-                WHERE empresa_id={emp_id} AND km_atual>0
-            """, emp_id)
-
-            df_manu = carregar_dados_tabela(f"""
-                SELECT veiculo_id, MAX(km_momento) AS ultimo_km
-                FROM custos
-                WHERE empresa_id={emp_id} AND categoria='Manutenção Preventiva'
-                GROUP BY veiculo_id
-            """, emp_id)
-
+            diag_dashboard = diagnostico_manutencao(emp_id)
             revisoes_proximas = []
-            for _, v in df_v_km.iterrows():
-                ultimo_km = 0.0
-                if not df_manu.empty and v["id"] in df_manu["veiculo_id"].values:
-                    serie = df_manu.loc[df_manu["veiculo_id"] == v["id"], "ultimo_km"]
-                    if not serie.empty and pd.notna(serie.iloc[0]):
-                        ultimo_km = float(serie.iloc[0])
-                km_rodado = float(v["km_atual"] or 0) - ultimo_km
-                if km_rodado >= 9500:
-                    revisoes_proximas.append((v["placa"], km_rodado))
+            if not diag_dashboard.empty:
+                diag_alerta = diag_dashboard[diag_dashboard["Status"].isin(["VENCIDO", "PRÓXIMO", "ATENÇÃO"])].copy()
+                prioridade_dash = {"VENCIDO": 0, "PRÓXIMO": 1, "ATENÇÃO": 2}
+                diag_alerta["_ordem"] = diag_alerta["Status"].map(prioridade_dash)
+                diag_alerta = diag_alerta.sort_values(["_ordem", "Faltam KM", "Faltam Dias"], na_position="last")
+                for _, manut in diag_alerta.iterrows():
+                    if pd.notna(manut["Faltam KM"]):
+                        detalhe = f"{int(manut['Faltam KM']):,} km".replace(",", ".")
+                    elif pd.notna(manut["Faltam Dias"]):
+                        detalhe = f"{int(manut['Faltam Dias'])} dia(s)"
+                    else:
+                        detalhe = manut["Status"]
+                    revisoes_proximas.append({
+                        "placa": manut["Placa"],
+                        "servico": manut["Serviço"],
+                        "status": manut["Status"],
+                        "detalhe": detalhe,
+                    })
+            else:
+                # Compatibilidade temporária: veículos ainda sem plano continuam usando o alerta genérico legado.
+                df_v_km = carregar_dados_tabela(f"""
+                    SELECT id, placa, km_atual
+                    FROM veiculos
+                    WHERE empresa_id={emp_id} AND km_atual>0
+                """, emp_id)
+                df_manu = carregar_dados_tabela(f"""
+                    SELECT veiculo_id, MAX(km_momento) AS ultimo_km
+                    FROM custos
+                    WHERE empresa_id={emp_id} AND categoria='Manutenção Preventiva'
+                    GROUP BY veiculo_id
+                """, emp_id)
+                for _, v in df_v_km.iterrows():
+                    ultimo_km = 0.0
+                    if not df_manu.empty and v["id"] in df_manu["veiculo_id"].values:
+                        serie = df_manu.loc[df_manu["veiculo_id"] == v["id"], "ultimo_km"]
+                        if not serie.empty and pd.notna(serie.iloc[0]):
+                            ultimo_km = float(serie.iloc[0])
+                    km_rodado = float(v["km_atual"] or 0) - ultimo_km
+                    if km_rodado >= 9500:
+                        revisoes_proximas.append({
+                            "placa": v["placa"], "servico": "Revisão preventiva",
+                            "status": "PRÓXIMO", "detalhe": f"{km_rodado:,.0f} km desde a última preventiva"
+                        })
 
             if revisoes_proximas:
-                alertas.append(("Manutenção preventiva", f"{len(revisoes_proximas)} veículo(s) estão próximos ou acima do intervalo de revisão."))
+                veiculos_alerta = len({r["placa"] for r in revisoes_proximas})
+                primeiro = revisoes_proximas[0]
+                alertas.append((
+                    "Manutenção preventiva",
+                    f"{veiculos_alerta} veículo(s) exigem atenção. {primeiro['placa']} · {primeiro['servico']} ({primeiro['status']})."
+                ))
 
             if alertas:
                 with st.container(border=True):
@@ -1366,7 +1754,7 @@ else:
                     st.markdown("### Saúde da Frota")
                     st.caption("Indicadores para manutenção e disponibilidade.")
 
-                    qtd_revisao = len(revisoes_proximas)
+                    qtd_revisao = len({r["placa"] for r in revisoes_proximas})
                     veiculos_saudaveis = max(veiculos_totais - veiculos_manutencao - qtd_revisao, 0)
 
                     s1, s2 = st.columns(2)
@@ -1380,8 +1768,11 @@ else:
                     if revisoes_proximas:
                         st.markdown("---")
                         st.markdown("**Veículos que exigem atenção**")
-                        for placa, km_rodado in revisoes_proximas[:4]:
-                            st.caption(f"{placa} · {km_rodado:,.0f} km desde a última preventiva")
+                        for revisao in revisoes_proximas[:4]:
+                            st.caption(
+                                f"{revisao['placa']} · {revisao['servico']} · "
+                                f"{revisao['status']} · {revisao['detalhe']}"
+                            )
                     elif veiculos_manutencao == 0:
                         st.success("Nenhum alerta crítico de manutenção.", icon=None)
 
@@ -1520,7 +1911,7 @@ else:
 
             st.markdown("<br>", unsafe_allow_html=True)
             
-            tab_admin, tab_status, tab_gastos, tab_saude = st.tabs(["Cadastro de veículos", "Alterar status", "Análise de gastos", "Saúde da frota"])
+            tab_admin, tab_status, tab_gastos, tab_planos, tab_saude = st.tabs(["Cadastro de veículos", "Alterar status", "Análise de gastos", "Planos de manutenção", "Saúde da frota"])
 
             # ── Aba: Cadastro ─────────────────────────────────────────────────────
             with tab_admin:
@@ -1532,10 +1923,20 @@ else:
                         status_novo = st.selectbox("Status inicial", ["Disponível", "Alugado", "Manutenção"])
                         
                         with st.container():
-                            ca, cb = st.columns(2)
-                            placa  = ca.text_input("Placa", placeholder="ABC-1234")
-                            modelo = cb.text_input("Modelo", placeholder="Ex: Fiat Cronos")
-                            km     = st.number_input("KM atual", min_value=0.0, step=100.0, value=0.0)
+                            ca, cb, cc = st.columns([0.9, 1.15, 0.7])
+                            placa = ca.text_input("Placa", placeholder="ABC-1234")
+                            fabricante = cb.text_input("Fabricante", placeholder="Ex.: Fiat")
+                            ano_modelo = cc.number_input("Ano/modelo", min_value=1900, max_value=2100, step=1, value=date.today().year)
+
+                            cm1, cm2, cm3 = st.columns(3)
+                            modelo = cm1.text_input("Modelo", placeholder="Ex.: Argo")
+                            versao = cm2.text_input("Versão (opcional)", placeholder="Ex.: Drive")
+                            motorizacao = cm3.text_input("Motorização (opcional)", placeholder="Ex.: 1.0 Firefly")
+
+                            cm4, cm5, cm6 = st.columns(3)
+                            combustivel_veiculo = cm4.selectbox("Combustível", ["Não informado", "Flex", "Gasolina", "Etanol", "Diesel", "Elétrico", "Híbrido"], key="frota_combustivel_novo")
+                            transmissao = cm5.selectbox("Transmissão", ["Não informado", "Manual", "Automática", "Automatizada", "CVT"], key="frota_transmissao_novo")
+                            km = cm6.number_input("KM atual", min_value=0.0, step=100.0, value=0.0)
 
                             d_inicio = km_ini = d_fim = km_fim = cliente = cnpj_v = tipo_v = None
                             valor_m = multa_c = juros_c = 0.0
@@ -1586,10 +1987,16 @@ else:
                                             
                                     if not erro:
                                         nv = Veiculo(
-                                            empresa_id=emp_id, 
-                                            placa=placa.upper(), 
-                                            modelo=modelo, 
-                                            km_atual=km_val, 
+                                            empresa_id=emp_id,
+                                            placa=placa.upper(),
+                                            fabricante=fabricante or None,
+                                            modelo=modelo,
+                                            ano_modelo=int(ano_modelo) if ano_modelo else None,
+                                            versao=versao or None,
+                                            motorizacao=motorizacao or None,
+                                            combustivel=None if combustivel_veiculo == "Não informado" else combustivel_veiculo,
+                                            transmissao=None if transmissao == "Não informado" else transmissao,
+                                            km_atual=km_val,
                                             status=status_novo
                                         )
                                         session.add(nv)
@@ -1909,67 +2316,342 @@ else:
                                 else:
                                     st.caption("Veículo sem histórico financeiro.")
 
+            # ── Aba: Planos de manutenção ─────────────────────────────────────────
+            with tab_planos:
+                st.markdown("### Planos de manutenção")
+                st.caption(
+                    "Cadastre o plano uma vez por configuração de veículo e reutilize-o em todas as placas compatíveis. "
+                    "O histórico permanece individual por veículo."
+                )
+
+                df_planos = carregar_dados_tabela(f"""
+                    SELECT id, nome, fabricante, modelo, ano_modelo, versao, motorizacao,
+                           combustivel, transmissao, ativo
+                    FROM planos_manutencao
+                    WHERE empresa_id={emp_id}
+                    ORDER BY nome
+                """, emp_id)
+
+                com_plano = int(df_veiculos["plano_manutencao_id"].notna().sum()) if "plano_manutencao_id" in df_veiculos.columns else 0
+                pm1, pm2, pm3 = st.columns(3)
+                pm1.metric("Planos-base", len(df_planos))
+                pm2.metric("Veículos com plano", com_plano)
+                pm3.metric("Sem plano", max(total - com_plano, 0))
+
+                st.markdown("<br>", unsafe_allow_html=True)
+                plano_individual, plano_massivo, planos_existentes = st.tabs([
+                    "Por veículo", "Importação massiva", "Planos cadastrados"
+                ])
+
+                with plano_individual:
+                    opcoes_plano_veiculo = {
+                        f"{r['modelo']} · {r['placa']}": int(r["id"])
+                        for _, r in df_veiculos.sort_values(["modelo", "placa"]).iterrows()
+                    }
+                    veiculo_plano_label = st.selectbox(
+                        "Veículo",
+                        list(opcoes_plano_veiculo.keys()),
+                        key="plano_veiculo_individual"
+                    )
+                    veiculo_plano_id = opcoes_plano_veiculo[veiculo_plano_label]
+                    vrow = df_veiculos.loc[df_veiculos["id"] == veiculo_plano_id].iloc[0]
+
+                    atual_plano_id = vrow.get("plano_manutencao_id")
+                    plano_atual_nome = "Nenhum plano associado"
+                    if pd.notna(atual_plano_id) and not df_planos.empty and int(atual_plano_id) in df_planos["id"].astype(int).values:
+                        plano_atual_nome = df_planos.loc[df_planos["id"].astype(int) == int(atual_plano_id), "nome"].iloc[0]
+
+                    st.info(
+                        f"**{vrow['modelo']} · {vrow['placa']}**  |  KM: **{float(vrow['km_atual'] or 0):,.0f}**  |  "
+                        f"Plano atual: **{plano_atual_nome}**",
+                        icon=None
+                    )
+
+                    # Monta o modelo individual com os itens já cadastrados, quando existirem.
+                    base_rows = []
+                    if pd.notna(atual_plano_id):
+                        df_itens_modelo = carregar_dados_tabela(f"""
+                            SELECT i.id, i.codigo_servico, i.tipo_manutencao, i.descricao,
+                                   i.intervalo_fabricante_km, i.intervalo_fabricante_meses,
+                                   i.intervalo_empresa_km, i.intervalo_empresa_meses
+                            FROM itens_plano_manutencao i
+                            WHERE i.empresa_id={emp_id} AND i.plano_id={int(atual_plano_id)} AND COALESCE(i.ativo,1)=1
+                            ORDER BY i.tipo_manutencao
+                        """, emp_id)
+                    else:
+                        df_itens_modelo = pd.DataFrame()
+
+                    if not df_itens_modelo.empty:
+                        df_hist_modelo = carregar_dados_tabela(f"""
+                            SELECT plano_item_id, data_execucao, km_execucao, id
+                            FROM manutencoes_realizadas
+                            WHERE empresa_id={emp_id} AND veiculo_id={veiculo_plano_id}
+                            ORDER BY id DESC
+                        """, emp_id)
+                        for _, item in df_itens_modelo.iterrows():
+                            hist_item = df_hist_modelo[df_hist_modelo["plano_item_id"] == item["id"]] if not df_hist_modelo.empty else pd.DataFrame()
+                            ult_km = ""
+                            ult_data = ""
+                            if not hist_item.empty:
+                                hist_item = hist_item.copy()
+                                hist_item["data_execucao"] = pd.to_datetime(hist_item["data_execucao"], errors="coerce")
+                                hist_item["km_execucao"] = pd.to_numeric(hist_item["km_execucao"], errors="coerce")
+                                kms_validos = hist_item["km_execucao"].dropna()
+                                datas_validas = hist_item["data_execucao"].dropna()
+                                ult_km = kms_validos.max() if not kms_validos.empty else ""
+                                ult_data = datas_validas.max().date() if not datas_validas.empty else ""
+                            base_rows.append({
+                                "placa": vrow["placa"],
+                                "fabricante": vrow.get("fabricante", ""),
+                                "modelo": vrow["modelo"],
+                                "ano_modelo": vrow.get("ano_modelo", ""),
+                                "versao": vrow.get("versao", ""),
+                                "motorizacao": vrow.get("motorizacao", ""),
+                                "combustivel": vrow.get("combustivel", ""),
+                                "transmissao": vrow.get("transmissao", ""),
+                                "nome_plano": plano_atual_nome,
+                                "codigo_servico": item["codigo_servico"] or "",
+                                "tipo_manutencao": item["tipo_manutencao"],
+                                "descricao_servico": item["descricao"] or "",
+                                "intervalo_fabricante_km": item["intervalo_fabricante_km"] or "",
+                                "intervalo_fabricante_meses": item["intervalo_fabricante_meses"] or "",
+                                "intervalo_empresa_km": item["intervalo_empresa_km"] or "",
+                                "intervalo_empresa_meses": item["intervalo_empresa_meses"] or "",
+                                "ultima_manutencao_km": ult_km,
+                                "ultima_manutencao_data": ult_data,
+                                "observacoes": "",
+                            })
+                    else:
+                        base_rows.append({
+                            "placa": vrow["placa"],
+                            "fabricante": vrow.get("fabricante", ""),
+                            "modelo": vrow["modelo"],
+                            "ano_modelo": vrow.get("ano_modelo", ""),
+                            "versao": vrow.get("versao", ""),
+                            "motorizacao": vrow.get("motorizacao", ""),
+                            "combustivel": vrow.get("combustivel", ""),
+                            "transmissao": vrow.get("transmissao", ""),
+                            "nome_plano": _nome_plano_padrao(vrow),
+                        })
+
+                    modelo_individual = gerar_planilha_planos(pd.DataFrame(base_rows))
+                    di1, di2 = st.columns(2)
+                    di1.download_button(
+                        "Baixar modelo deste veículo",
+                        modelo_individual,
+                        file_name=f"plano_{str(vrow['placa']).replace('-', '')}.xlsx",
+                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                        use_container_width=True,
+                        key="baixar_plano_individual"
+                    )
+
+                    arquivo_plano_ind = di2.file_uploader(
+                        "Importar plano preenchido",
+                        type=["xlsx", "xls"],
+                        key="upload_plano_individual",
+                        label_visibility="collapsed"
+                    )
+
+                    if arquivo_plano_ind:
+                        try:
+                            df_pi = pd.read_excel(arquivo_plano_ind, sheet_name="Planos")
+                            st.dataframe(df_pi.head(20), use_container_width=True, hide_index=True)
+                            if st.button("Validar e importar plano deste veículo", use_container_width=True, key="importar_plano_individual"):
+                                resultado = processar_planilha_planos(
+                                    df_pi, emp_id, st.session_state["nome"], veiculo_id_forcado=veiculo_plano_id
+                                )
+                                st.cache_data.clear()
+                                st.success(
+                                    f"Plano importado: {resultado['veiculos']} veículo vinculado, "
+                                    f"{resultado['itens_novos']} item(ns) novo(s) e "
+                                    f"{resultado['historicos_novos']} histórico(s) inicial(is)."
+                                )
+                                if resultado["ignorados"]:
+                                    st.warning("Algumas linhas foram ignoradas: " + " | ".join(resultado["ignorados"][:5]), icon=None)
+                                time.sleep(0.6)
+                                st.rerun()
+                        except Exception as e:
+                            st.error(f"Não foi possível ler/importar o plano: {e}", icon=None)
+
+                with plano_massivo:
+                    st.markdown("**Modelo massivo da frota**")
+                    st.caption(
+                        "O arquivo já traz todas as placas cadastradas. Cadastre os serviços apenas uma vez para cada nome_plano; "
+                        "as demais placas equivalentes podem manter o tipo_manutencao em branco e serão vinculadas ao mesmo plano-base. "
+                        "Duplique somente a linha usada para cadastrar os vários serviços daquele plano."
+                    )
+                    rows_massivo = []
+                    for _, vr in df_veiculos.sort_values(["modelo", "placa"]).iterrows():
+                        rows_massivo.append({
+                            "placa": vr["placa"],
+                            "fabricante": vr.get("fabricante", ""),
+                            "modelo": vr["modelo"],
+                            "ano_modelo": vr.get("ano_modelo", ""),
+                            "versao": vr.get("versao", ""),
+                            "motorizacao": vr.get("motorizacao", ""),
+                            "combustivel": vr.get("combustivel", ""),
+                            "transmissao": vr.get("transmissao", ""),
+                            "nome_plano": _nome_plano_padrao(vr),
+                        })
+                    modelo_massivo = gerar_planilha_planos(pd.DataFrame(rows_massivo))
+                    mm1, mm2 = st.columns(2)
+                    mm1.download_button(
+                        "Baixar modelo massivo",
+                        modelo_massivo,
+                        file_name="planos_manutencao_frota.xlsx",
+                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                        use_container_width=True,
+                        key="baixar_planos_massivo"
+                    )
+                    arquivo_massivo = mm2.file_uploader(
+                        "Importar planos em massa",
+                        type=["xlsx", "xls"],
+                        key="upload_planos_massivo",
+                        label_visibility="collapsed"
+                    )
+                    if arquivo_massivo:
+                        try:
+                            df_pm = pd.read_excel(arquivo_massivo, sheet_name="Planos")
+                            st.dataframe(df_pm.head(30), use_container_width=True, hide_index=True)
+                            if st.button("Validar e importar planos em massa", use_container_width=True, key="importar_planos_massivo"):
+                                resultado = processar_planilha_planos(df_pm, emp_id, st.session_state["nome"])
+                                st.cache_data.clear()
+                                st.success(
+                                    f"Importação concluída: {resultado['planos']} plano(s), "
+                                    f"{resultado['veiculos']} veículo(s), {resultado['itens_novos']} item(ns) novo(s) e "
+                                    f"{resultado['historicos_novos']} histórico(s) inicial(is)."
+                                )
+                                if resultado["ignorados"]:
+                                    st.warning("Linhas ignoradas: " + " | ".join(resultado["ignorados"][:8]), icon=None)
+                                time.sleep(0.6)
+                                st.rerun()
+                        except Exception as e:
+                            st.error(f"Não foi possível ler/importar a planilha: {e}", icon=None)
+
+                with planos_existentes:
+                    if df_planos.empty:
+                        st.info("Nenhum plano-base cadastrado ainda.", icon=None)
+                    else:
+                        df_contagem_itens = carregar_dados_tabela(f"""
+                            SELECT plano_id, COUNT(*) AS itens
+                            FROM itens_plano_manutencao
+                            WHERE empresa_id={emp_id} AND COALESCE(ativo,1)=1
+                            GROUP BY plano_id
+                        """, emp_id)
+                        df_contagem_veiculos = carregar_dados_tabela(f"""
+                            SELECT plano_manutencao_id AS plano_id, COUNT(*) AS veiculos
+                            FROM veiculos
+                            WHERE empresa_id={emp_id} AND plano_manutencao_id IS NOT NULL
+                            GROUP BY plano_manutencao_id
+                        """, emp_id)
+                        df_show = df_planos.copy()
+                        df_show = df_show.merge(df_contagem_itens, left_on="id", right_on="plano_id", how="left") if not df_contagem_itens.empty else df_show.assign(itens=0)
+                        if "plano_id" in df_show.columns:
+                            df_show = df_show.drop(columns=["plano_id"])
+                        df_show = df_show.merge(df_contagem_veiculos, left_on="id", right_on="plano_id", how="left") if not df_contagem_veiculos.empty else df_show.assign(veiculos=0)
+                        if "plano_id" in df_show.columns:
+                            df_show = df_show.drop(columns=["plano_id"])
+                        df_show["itens"] = df_show["itens"].fillna(0).astype(int)
+                        df_show["veiculos"] = df_show["veiculos"].fillna(0).astype(int)
+                        st.dataframe(
+                            df_show[["nome", "fabricante", "modelo", "ano_modelo", "motorizacao", "itens", "veiculos"]].rename(columns={
+                                "nome": "Plano", "fabricante": "Fabricante", "modelo": "Modelo",
+                                "ano_modelo": "Ano", "motorizacao": "Motorização",
+                                "itens": "Itens", "veiculos": "Veículos"
+                            }),
+                            use_container_width=True,
+                            hide_index=True
+                        )
+
             # ── Aba: Saúde ────────────────────────────────────────────────────────
             with tab_saude:
                 if total == 0:
                     st.info("Nenhum veículo cadastrado.", icon=None)
                 else:
                     ch1, ch2 = st.columns([4, 1])
-                    ch1.markdown("**Diagnóstico de revisões preventivas**")
+                    ch1.markdown("**Saúde preventiva da frota**")
+                    ch1.caption("A situação é recalculada automaticamente sempre que o KM ou uma manutenção vinculada é registrada.")
                     with ch2:
                         csv_f = convert_df_to_csv(df_veiculos[["placa", "modelo", "km_atual", "status"]])
                         st.download_button("Exportar frota", csv_f, "frota.csv", "text/csv", use_container_width=True)
 
-                    df_custos_all = carregar_dados_tabela(f"SELECT * FROM custos WHERE empresa_id={emp_id}", emp_id)
-                    saude = []
-                    
-                    for _, v in df_veiculos.iterrows():
-                        cv = df_custos_all[df_custos_all["veiculo_id"] == v["id"]]
-                        gasto_manut = cv[cv["categoria"].str.contains("Manutenção", na=False)]["valor_total"].sum() if not cv.empty else 0
-                        gasto_comb  = cv[cv["categoria"] == "Combustível"]["valor_total"].sum() if not cv.empty else 0
+                    diag = diagnostico_manutencao(emp_id)
+                    veiculos_sem_plano = df_veiculos[df_veiculos["plano_manutencao_id"].isna()] if "plano_manutencao_id" in df_veiculos.columns else df_veiculos
 
-                        km_mes = 0.0
-                        if not cv.empty and cv["km_momento"].max() > 0:
-                            min_dt = pd.to_datetime(cv["data_custo"]).min().date()
-                            dias   = max((date.today() - min_dt).days, 1)
-                            km_rod = cv["km_momento"].max() - cv[cv["km_momento"] > 0]["km_momento"].min()
-                            if km_rod > 0: 
-                                km_mes = (km_rod / dias) * 30
+                    if diag.empty:
+                        st.info(
+                            "Nenhum plano de manutenção com itens ativos está associado à frota. "
+                            "Use a aba **Planos de manutenção** para importar o primeiro plano.",
+                            icon=None
+                        )
+                        if not veiculos_sem_plano.empty:
+                            st.dataframe(
+                                veiculos_sem_plano[["placa", "modelo", "km_atual", "status"]].rename(columns={
+                                    "placa": "Placa", "modelo": "Modelo", "km_atual": "KM Atual", "status": "Status"
+                                }),
+                                use_container_width=True,
+                                hide_index=True
+                            )
+                    else:
+                        ordem_status = {"VENCIDO": 0, "PRÓXIMO": 1, "ATENÇÃO": 2, "SEM HISTÓRICO": 3, "OK": 4}
+                        diag["_ordem"] = diag["Status"].map(ordem_status).fillna(9)
+                        diag = diag.sort_values(["_ordem", "Placa", "Serviço"])
 
-                        df_m      = cv[cv["categoria"] == "Manutenção Preventiva"]
-                        ult_km_m  = df_m["km_momento"].max() if not df_m.empty else 0
-                        km_rev    = v["km_atual"] - ult_km_m
-                        status_s  = "URGENTE" if km_rev >= 9500 else ("ATENÇÃO" if km_rev >= 8000 else "OK")
+                        criticos = diag[diag["Status"] == "VENCIDO"]
+                        proximos = diag[diag["Status"] == "PRÓXIMO"]
+                        atencao = diag[diag["Status"] == "ATENÇÃO"]
+                        normais = diag[diag["Status"] == "OK"]
 
-                        saude.append({
-                            "Placa":        v["placa"],
-                            "Modelo":         v["modelo"],
-                            "KM Atual":        int(v["km_atual"]),
-                            "KM s/ revisão":   int(km_rev),
-                            "Saúde":         status_s,
-                            "Média KM/mês":    int(km_mes),
-                            "Manutenção (R$)": round(gasto_manut, 2),
-                            "Combustível (R$)": round(gasto_comb, 2),
-                        })
+                        hs1, hs2, hs3, hs4 = st.columns(4)
+                        hs1.metric("Manutenções vencidas", len(criticos))
+                        hs2.metric("Próximas", len(proximos))
+                        hs3.metric("Em atenção", len(atencao))
+                        hs4.metric("Dentro do plano", len(normais))
 
-                    df_saude = pd.DataFrame(saude)
+                        st.markdown("<br>", unsafe_allow_html=True)
+                        filtro_status = st.multiselect(
+                            "Filtrar situação",
+                            ["VENCIDO", "PRÓXIMO", "ATENÇÃO", "SEM HISTÓRICO", "OK"],
+                            default=["VENCIDO", "PRÓXIMO", "ATENÇÃO", "SEM HISTÓRICO", "OK"],
+                            key="saude_filtro_status"
+                        )
+                        diag_exibir = diag[diag["Status"].isin(filtro_status)].copy()
+                        diag_exibir["Última Data"] = pd.to_datetime(diag_exibir["Última Data"], errors="coerce").dt.strftime("%d/%m/%Y").fillna("—")
+                        diag_exibir["Próxima Data"] = pd.to_datetime(diag_exibir["Próxima Data"], errors="coerce").dt.strftime("%d/%m/%Y").fillna("—")
+                        for col in ["Última KM", "Próxima KM", "Faltam KM", "Faltam Dias"]:
+                            diag_exibir[col] = diag_exibir[col].apply(lambda x: "—" if pd.isna(x) else f"{int(x):,}".replace(",", "."))
 
-                    def cor_saude(v):
-                        return ("color:#065F46;background:#D1FAE5;font-weight:600;" if v == "OK"
-                                else "color:#92400E;background:#FEF3C7;font-weight:600;" if v == "ATENÇÃO"
-                                else "color:#991B1B;background:#FEE2E2;font-weight:600;")
+                        tabela_diag = diag_exibir[[
+                            "Placa", "Modelo", "KM Atual", "Serviço", "Última KM", "Próxima KM",
+                            "Faltam KM", "Próxima Data", "Faltam Dias", "Status"
+                        ]]
 
-                    if hasattr(df_saude.style, "map"): 
-                        styled = df_saude.style.map(cor_saude, subset=["Saúde"])
-                    else: 
-                        styled = df_saude.style.applymap(cor_saude, subset=["Saúde"])
+                        def cor_status_manut(v):
+                            if v == "OK":
+                                return "color:#065F46;background:#D1FAE5;font-weight:600;"
+                            if v == "ATENÇÃO":
+                                return "color:#92400E;background:#FEF3C7;font-weight:600;"
+                            if v == "PRÓXIMO":
+                                return "color:#9A3412;background:#FFEDD5;font-weight:600;"
+                            if v == "VENCIDO":
+                                return "color:#991B1B;background:#FEE2E2;font-weight:600;"
+                            return "color:#475569;background:#F1F5F9;font-weight:600;"
 
-                    styled = styled.format({
-                        "Manutenção (R$)":  "{:.2f}",
-                        "Combustível (R$)": "{:.2f}",
-                    })
-                    
-                    st.dataframe(styled, use_container_width=True, hide_index=True)
+                        if hasattr(tabela_diag.style, "map"):
+                            styled_diag = tabela_diag.style.map(cor_status_manut, subset=["Status"])
+                        else:
+                            styled_diag = tabela_diag.style.applymap(cor_status_manut, subset=["Status"])
+                        st.dataframe(styled_diag, use_container_width=True, hide_index=True)
+
+                        if not veiculos_sem_plano.empty:
+                            with st.expander(f"Veículos sem plano de manutenção ({len(veiculos_sem_plano)})"):
+                                st.dataframe(
+                                    veiculos_sem_plano[["placa", "modelo", "km_atual", "status"]].rename(columns={
+                                        "placa": "Placa", "modelo": "Modelo", "km_atual": "KM Atual", "status": "Status"
+                                    }),
+                                    use_container_width=True,
+                                    hide_index=True
+                                )
 
         # ══════════════════════════════════════════════════════════════════════════
         # GESTÃO DE CUSTOS
@@ -1981,7 +2663,7 @@ else:
             )
 
             df_veiculos = carregar_dados_tabela(f"""
-                SELECT id, placa, modelo, km_atual, status
+                SELECT id, placa, modelo, km_atual, status, plano_manutencao_id
                 FROM veiculos
                 WHERE empresa_id={emp_id}
                 ORDER BY modelo, placa
@@ -2086,6 +2768,13 @@ else:
                             key=f"custos_km_{veiculo_id_sel}"
                         )
 
+                        if float(km_atual or 0) > 0 and float(km_atual or 0) < km_cadastrado:
+                            st.warning(
+                                f"O KM informado ({float(km_atual):,.0f}) é inferior ao hodômetro atual ({km_cadastrado:,.0f}). "
+                                "O lançamento será aceito como histórico e não reduzirá o KM atual do veículo.",
+                                icon=None
+                            )
+
                         litros = None
                         if cat == "Combustível":
                             litros = d3.number_input(
@@ -2114,6 +2803,50 @@ else:
                             d3.caption(
                                 "Esta categoria não exige informação complementar."
                             )
+
+                        tipo_manutencao = None
+                        plano_item_id = None
+                        if cat in ["Manutenção Preventiva", "Manutenção Corretiva"]:
+                            plano_id_veiculo = veiculo_ctx.get("plano_manutencao_id")
+                            if pd.notna(plano_id_veiculo):
+                                df_itens_custo = carregar_dados_tabela(f"""
+                                    SELECT id, tipo_manutencao, descricao,
+                                           intervalo_fabricante_km, intervalo_empresa_km
+                                    FROM itens_plano_manutencao
+                                    WHERE empresa_id={emp_id} AND plano_id={int(plano_id_veiculo)} AND COALESCE(ativo,1)=1
+                                    ORDER BY tipo_manutencao
+                                """, emp_id)
+                            else:
+                                df_itens_custo = pd.DataFrame()
+
+                            if not df_itens_custo.empty:
+                                opcoes_manut = {
+                                    str(r["tipo_manutencao"]): int(r["id"])
+                                    for _, r in df_itens_custo.iterrows()
+                                }
+                                opcoes_labels = list(opcoes_manut.keys()) + ["Outro / não vinculado ao plano"]
+                                manut_label = st.selectbox(
+                                    "Tipo de manutenção",
+                                    opcoes_labels,
+                                    key="custos_tipo_manutencao"
+                                )
+                                if manut_label != "Outro / não vinculado ao plano":
+                                    tipo_manutencao = manut_label
+                                    plano_item_id = opcoes_manut[manut_label]
+                                    item_ctx = df_itens_custo.loc[df_itens_custo["id"] == plano_item_id].iloc[0]
+                                    intervalo_ctx = _intervalo_efetivo(item_ctx["intervalo_empresa_km"], item_ctx["intervalo_fabricante_km"])
+                                    if intervalo_ctx:
+                                        st.caption(f"Este lançamento reiniciará o ciclo de **{manut_label}**. Intervalo efetivo: **{intervalo_ctx:,.0f} km**.")
+                            else:
+                                tipo_manutencao = st.text_input(
+                                    "Tipo de manutenção",
+                                    placeholder="Ex.: Troca de óleo do motor",
+                                    key="custos_tipo_manutencao_livre"
+                                )
+                                st.warning(
+                                    "Este veículo ainda não possui plano vinculado. O custo será registrado, mas não reiniciará automaticamente um ciclo preventivo.",
+                                    icon=None
+                                )
 
                         descricao = st.text_input(
                             "Descrição / observação",
@@ -2196,19 +2929,6 @@ else:
                                         icon=None
                                     )
 
-                                elif (
-                                    km_val > 0
-                                    and km_val < float(
-                                        veiculo_db.km_atual or 0
-                                    )
-                                ):
-                                    st.error(
-                                        "O KM informado não pode ser menor que "
-                                        f"o KM atual cadastrado "
-                                        f"({int(veiculo_db.km_atual or 0)} km).",
-                                        icon=None
-                                    )
-
                                 else:
                                     comp_path = None
 
@@ -2221,6 +2941,8 @@ else:
 
                                         with open(comp_path, "wb") as f:
                                             f.write(arquivo.getbuffer())
+
+                                    custo_manutencao_base_id = None
 
                                     if (
                                         forma_pag == "Cartão de Crédito"
@@ -2243,7 +2965,7 @@ else:
                                                 f"Parcela {i + 1}/{parcelas_q}"
                                             )
 
-                                            session.add(Custo(
+                                            custo_parcela = Custo(
                                                 empresa_id=emp_id,
                                                 veiculo_id=veiculo_db.id,
                                                 data_custo=dt_parcela,
@@ -2267,11 +2989,17 @@ else:
                                                     comp_path
                                                     if i == 0
                                                     else None
-                                                )
-                                            ))
+                                                ),
+                                                tipo_manutencao=tipo_manutencao,
+                                                plano_item_id=plano_item_id
+                                            )
+                                            session.add(custo_parcela)
+                                            if i == 0:
+                                                session.flush()
+                                                custo_manutencao_base_id = custo_parcela.id
 
                                     else:
-                                        session.add(Custo(
+                                        custo_unico = Custo(
                                             empresa_id=emp_id,
                                             veiculo_id=veiculo_db.id,
                                             data_custo=data_custo,
@@ -2287,7 +3015,28 @@ else:
                                             condicao_pagamento=condicao_pag,
                                             parcelas=parcelas_q,
                                             motorista=motorista,
-                                            comprovante=comp_path
+                                            comprovante=comp_path,
+                                            tipo_manutencao=tipo_manutencao,
+                                            plano_item_id=plano_item_id
+                                        )
+                                        session.add(custo_unico)
+                                        session.flush()
+                                        custo_manutencao_base_id = custo_unico.id
+
+                                    if (
+                                        plano_item_id
+                                        and cat in ["Manutenção Preventiva", "Manutenção Corretiva"]
+                                        and custo_manutencao_base_id
+                                    ):
+                                        session.add(ManutencaoRealizada(
+                                            empresa_id=emp_id,
+                                            veiculo_id=veiculo_db.id,
+                                            plano_item_id=plano_item_id,
+                                            custo_id=custo_manutencao_base_id,
+                                            data_execucao=data_custo,
+                                            km_execucao=km_val if km_val > 0 else None,
+                                            observacoes=descricao or tipo_manutencao,
+                                            origem="Gestão de Custos"
                                         ))
 
                                     if km_val > float(
@@ -2325,6 +3074,7 @@ else:
                             v.placa,
                             v.modelo,
                             c.categoria,
+                            c.tipo_manutencao,
                             c.descricao,
                             c.valor_total,
                             c.km_momento,
@@ -2604,10 +3354,13 @@ else:
                                     )
                                 )
 
+                                df_exibicao["Tipo manutenção"] = df_exibicao["tipo_manutencao"].fillna("—")
+
                                 tabela_custos = df_exibicao[[
                                     "Data",
                                     "Veículo",
                                     "categoria",
+                                    "Tipo manutenção",
                                     "descricao",
                                     "Valor",
                                     "Pagamento",
@@ -2790,9 +3543,13 @@ else:
                                                     )
 
                                                 else:
-                                                    session.delete(
-                                                        custo_db
-                                                    )
+                                                    historicos_vinculados = session.query(ManutencaoRealizada).filter(
+                                                        ManutencaoRealizada.empresa_id == emp_id,
+                                                        ManutencaoRealizada.custo_id == custo_db.id
+                                                    ).all()
+                                                    for historico in historicos_vinculados:
+                                                        session.delete(historico)
+                                                    session.delete(custo_db)
                                                     session.commit()
                                                     st.cache_data.clear()
 
