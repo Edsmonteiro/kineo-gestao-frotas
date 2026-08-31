@@ -1,6 +1,15 @@
 import os
 import streamlit as st
-from sqlalchemy import create_engine, Column, Integer, String, Float, Date
+from sqlalchemy import (
+    create_engine,
+    Column,
+    Integer,
+    String,
+    Float,
+    Date,
+    inspect,
+    text,
+)
 from sqlalchemy.orm import sessionmaker, declarative_base
 import bcrypt
 
@@ -124,27 +133,101 @@ class CobrancaMensal(Base):
     data_recebimento = Column(Date, nullable=True)
     observacoes = Column(String, nullable=True)
 
-# ─── INICIALIZAÇÃO DO BANCO ──────────────────────────────────────────────────
+# ─── INICIALIZAÇÃO / MIGRAÇÃO DO BANCO ───────────────────────────────────────
+
 Base.metadata.create_all(bind=engine)
+
+
+def garantir_colunas_contratos():
+    """
+    Garante que instalações antigas do banco possuam todas as colunas
+    necessárias ao módulo de Gestão de Contratos.
+    """
+
+    inspector = inspect(engine)
+
+    if "contratos" not in inspector.get_table_names():
+        return
+
+    colunas_existentes = {
+        coluna["name"]
+        for coluna in inspector.get_columns("contratos")
+    }
+
+    colunas_necessarias = {
+        "empresa_id": "INTEGER DEFAULT 1",
+        "veiculo_id": "INTEGER",
+        "cliente": "VARCHAR",
+        "cnpj": "VARCHAR",
+        "data_inicio": "DATE",
+        "data_fim": "DATE",
+        "km_inicial": "FLOAT DEFAULT 0.0",
+        "km_final": "FLOAT DEFAULT 0.0",
+        "ativo": "INTEGER DEFAULT 1",
+        "usuario_lancamento": "VARCHAR",
+        "tipo_valor": "VARCHAR DEFAULT 'Fixo'",
+        "valor_mensal": "FLOAT DEFAULT 0.0",
+        "multa": "FLOAT DEFAULT 2.0",
+        "juros": "FLOAT DEFAULT 1.0",
+    }
+
+    colunas_faltantes = {
+        nome: tipo
+        for nome, tipo in colunas_necessarias.items()
+        if nome not in colunas_existentes
+    }
+
+    if colunas_faltantes:
+
+        with engine.begin() as connection:
+
+            for nome, tipo in colunas_faltantes.items():
+
+                connection.execute(
+                    text(
+                        f'ALTER TABLE contratos '
+                        f'ADD COLUMN "{nome}" {tipo}'
+                    )
+                )
+
+
+garantir_colunas_contratos()
+
 
 def inicializar_dados():
     session = SessionLocal()
+
     # Cria a primeira empresa caso não exista
     if not session.query(Empresa).first():
-        session.add(Empresa(id=1, nome_fantasia="Kineo", logo_path=None))
+        session.add(
+            Empresa(
+                id=1,
+                nome_fantasia="Kineo",
+                logo_path=None
+            )
+        )
         session.commit()
 
     # Cria o usuário admin inicial caso não exista
     if not session.query(Usuario).first():
-        senha_hash = bcrypt.hashpw(b"PRIMEIROACESSO", bcrypt.gensalt()).decode()
-        session.add(Usuario(
-            empresa_id=1,
-            nome="Administrador",
-            login="admin",
-            senha=senha_hash,
-            perfil="admin"
-        ))
+        senha_hash = bcrypt.hashpw(
+            b"PRIMEIROACESSO",
+            bcrypt.gensalt()
+        ).decode()
+
+        session.add(
+            Usuario(
+                empresa_id=1,
+                nome="Administrador",
+                login="admin",
+                senha=senha_hash,
+                perfil="admin"
+            )
+        )
+
         session.commit()
+
     session.close()
+
 
 inicializar_dados()
