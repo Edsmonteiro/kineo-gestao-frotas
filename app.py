@@ -57,8 +57,14 @@ html, body, [class*="css"] {{
     visibility: hidden; 
 }}
 
+/* Remove o cabeçalho superior do Streamlit (some com o barquinho, share e ícone do GitHub) */
 header[data-testid="stHeader"] {{ 
-    background: transparent !important; 
+    display: none !important; 
+}}
+
+/* Remove o ícone de âncora de link dos títulos */
+a.header-anchor {{
+    display: none !important;
 }}
 
 /* ── Fundo Geral com Pattern (Pontilhados Elegantes) ── */
