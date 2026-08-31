@@ -1,15 +1,6 @@
 import os
 import streamlit as st
-from sqlalchemy import (
-    create_engine,
-    Column,
-    Integer,
-    String,
-    Float,
-    Date,
-    inspect,
-    text,
-)
+from sqlalchemy import create_engine, Column, Integer, String, Float, Date, inspect, text
 from sqlalchemy.orm import sessionmaker, declarative_base
 import bcrypt
 
@@ -87,6 +78,18 @@ class Contrato(Base):
     multa = Column(Float, default=2.0)
     juros = Column(Float, default=1.0)
 
+class SubstituicaoContrato(Base):
+    __tablename__ = "substituicoes_contrato"
+    id = Column(Integer, primary_key=True, index=True)
+    empresa_id = Column(Integer, default=1)
+    contrato_id = Column(Integer, nullable=False)
+    veiculo_principal_id = Column(Integer, nullable=False)
+    veiculo_substituto_id = Column(Integer, nullable=False)
+    data_inicio = Column(Date, nullable=False)
+    data_fim = Column(Date, nullable=True)
+    ativo = Column(Integer, default=1)
+    usuario_lancamento = Column(String, nullable=True)
+
 class Custo(Base):
     __tablename__ = "custos"
     id = Column(Integer, primary_key=True, index=True)
@@ -134,27 +137,16 @@ class CobrancaMensal(Base):
     observacoes = Column(String, nullable=True)
 
 # ─── INICIALIZAÇÃO / MIGRAÇÃO DO BANCO ───────────────────────────────────────
-
 Base.metadata.create_all(bind=engine)
 
-
 def garantir_colunas_contratos():
-    """
-    Garante que instalações antigas do banco possuam todas as colunas
-    necessárias ao módulo de Gestão de Contratos.
-    """
-
+    """Mantém bancos antigos compatíveis com o modelo atual de contratos."""
     inspector = inspect(engine)
-
     if "contratos" not in inspector.get_table_names():
         return
 
-    colunas_existentes = {
-        coluna["name"]
-        for coluna in inspector.get_columns("contratos")
-    }
-
-    colunas_necessarias = {
+    existentes = {c["name"] for c in inspector.get_columns("contratos")}
+    necessarias = {
         "empresa_id": "INTEGER DEFAULT 1",
         "veiculo_id": "INTEGER",
         "cliente": "VARCHAR",
@@ -171,63 +163,62 @@ def garantir_colunas_contratos():
         "juros": "FLOAT DEFAULT 1.0",
     }
 
-    colunas_faltantes = {
-        nome: tipo
-        for nome, tipo in colunas_necessarias.items()
-        if nome not in colunas_existentes
+    faltantes = {nome: tipo for nome, tipo in necessarias.items() if nome not in existentes}
+    if not faltantes:
+        return
+
+    with engine.begin() as conn:
+        for nome, tipo in faltantes.items():
+            conn.execute(text(f'ALTER TABLE contratos ADD COLUMN "{nome}" {tipo}'))
+
+def garantir_colunas_substituicoes():
+    """Mantém a tabela de substituições compatível em deploys futuros."""
+    inspector = inspect(engine)
+    if "substituicoes_contrato" not in inspector.get_table_names():
+        Base.metadata.create_all(bind=engine)
+        return
+
+    existentes = {c["name"] for c in inspector.get_columns("substituicoes_contrato")}
+    necessarias = {
+        "empresa_id": "INTEGER DEFAULT 1",
+        "contrato_id": "INTEGER",
+        "veiculo_principal_id": "INTEGER",
+        "veiculo_substituto_id": "INTEGER",
+        "data_inicio": "DATE",
+        "data_fim": "DATE",
+        "ativo": "INTEGER DEFAULT 1",
+        "usuario_lancamento": "VARCHAR",
     }
 
-    if colunas_faltantes:
+    faltantes = {nome: tipo for nome, tipo in necessarias.items() if nome not in existentes}
+    if not faltantes:
+        return
 
-        with engine.begin() as connection:
-
-            for nome, tipo in colunas_faltantes.items():
-
-                connection.execute(
-                    text(
-                        f'ALTER TABLE contratos '
-                        f'ADD COLUMN "{nome}" {tipo}'
-                    )
-                )
-
+    with engine.begin() as conn:
+        for nome, tipo in faltantes.items():
+            conn.execute(text(f'ALTER TABLE substituicoes_contrato ADD COLUMN "{nome}" {tipo}'))
 
 garantir_colunas_contratos()
-
+garantir_colunas_substituicoes()
 
 def inicializar_dados():
     session = SessionLocal()
-
     # Cria a primeira empresa caso não exista
     if not session.query(Empresa).first():
-        session.add(
-            Empresa(
-                id=1,
-                nome_fantasia="Kineo",
-                logo_path=None
-            )
-        )
+        session.add(Empresa(id=1, nome_fantasia="Kineo", logo_path=None))
         session.commit()
 
     # Cria o usuário admin inicial caso não exista
     if not session.query(Usuario).first():
-        senha_hash = bcrypt.hashpw(
-            b"PRIMEIROACESSO",
-            bcrypt.gensalt()
-        ).decode()
-
-        session.add(
-            Usuario(
-                empresa_id=1,
-                nome="Administrador",
-                login="admin",
-                senha=senha_hash,
-                perfil="admin"
-            )
-        )
-
+        senha_hash = bcrypt.hashpw(b"PRIMEIROACESSO", bcrypt.gensalt()).decode()
+        session.add(Usuario(
+            empresa_id=1,
+            nome="Administrador",
+            login="admin",
+            senha=senha_hash,
+            perfil="admin"
+        ))
         session.commit()
-
     session.close()
-
 
 inicializar_dados()
