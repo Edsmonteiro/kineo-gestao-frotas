@@ -23,6 +23,7 @@ for key, default in [
     ("bloqueado_ate", 0),
     ("tela_config", False),
     ("sidebar_pinned", False),
+    ("uploader_key", 0), # Chave para resetar o uploader de planilhas
 ]:
     if key not in st.session_state:
         st.session_state[key] = default
@@ -97,10 +98,12 @@ a.header-anchor {{
     padding-left: 82px !important;
 }}
 
+/* Força a barra lateral a colar no topo, removendo o gap nativo do Streamlit */
 [data-testid="stSidebar"] .stScrollToBottomContainer > div:first-child {{
     display: flex;
     flex-direction: column;
     min-height: 100vh;
+    padding-top: 2rem !important; 
 }}
 
 .sidebar-brand-wrapper {{
@@ -111,7 +114,7 @@ a.header-anchor {{
     padding-left: 17px; 
     width: {SIDEBAR_WIDTH}; 
     margin-bottom: 1rem;
-    padding-top: 1.5rem;
+    padding-top: 0;
     padding-bottom: 1rem;
     overflow: hidden;
     white-space: nowrap;
@@ -148,11 +151,6 @@ a.header-anchor {{
     color: #F8FAFC !important; 
     font-size: 1.1rem !important; 
     margin: 0 !important; 
-}}
-
-.sidebar-brand-text span {{ 
-    color: #94A3B8; 
-    font-size: 0.75rem; 
 }}
 
 [data-testid="stSidebar"] .stButton > button {{
@@ -697,7 +695,6 @@ else:
                 <img src="data:image/jpeg;base64,{encoded_string}" class="sidebar-logo-img">
                 <div class="sidebar-brand-text">
                     <h2>{empresa_atual.nome_fantasia}</h2>
-                    <span>Gestão de Frotas</span>
                 </div>
             </div>
             """, unsafe_allow_html=True)
@@ -710,7 +707,6 @@ else:
                 <div class="sidebar-logo-img">{letra}</div>
                 <div class="sidebar-brand-text">
                     <h2>{nome_emp}</h2>
-                    <span>Gestão de Frotas</span>
                 </div>
             </div>
             """, unsafe_allow_html=True)
@@ -1093,12 +1089,11 @@ else:
                         st.markdown("**Importação em Massa de Veículos Disponíveis**")
                         st.caption("Envie uma planilha contendo as colunas: **placa**, **modelo** e **km** (opcional). Os veículos serão cadastrados automaticamente com o status **Disponível**.")
 
-                        arquivo_xls = st.file_uploader("Selecione o arquivo Excel (.xls ou .xlsx)", type=["xls", "xlsx"])
+                        arquivo_xls = st.file_uploader("Selecione o arquivo Excel (.xls ou .xlsx)", type=["xls", "xlsx"], key=f"up_xls_{st.session_state['uploader_key']}")
 
                         if arquivo_xls:
                             try:
                                 df_import = pd.read_excel(arquivo_xls)
-                                # Normaliza colunas para minúsculas e remove espaços
                                 df_import.columns = [str(c).strip().lower() for c in df_import.columns]
 
                                 colunas_necessarias = ["placa", "modelo"]
@@ -1122,7 +1117,6 @@ else:
                                                 erros += 1
                                                 continue
 
-                                            # Trata o KM: se não houver ou for nulo/inválido, considera 0.0
                                             km_val = 0.0
                                             if "km" in df_import.columns:
                                                 try:
@@ -1132,7 +1126,6 @@ else:
                                                 except:
                                                     km_val = 0.0
 
-                                            # Verifica se a placa já existe para esta empresa
                                             existe_placa = session.query(Veiculo).filter_by(empresa_id=emp_id, placa=p_val).first()
                                             if not existe_placa:
                                                 novo_v = Veiculo(
@@ -1148,7 +1141,9 @@ else:
                                         session.commit()
                                         session.close()
 
-                                        st.success(f"Importação concluída! {sucessos} veículo(s) cadastrado(s) com sucesso. ({erros} linha(s) ignoradas por dados incompletos).")
+                                        st.success(f"Importação concluída! {sucessos} veículo(s) cadastrado(s) com sucesso. ({erros} ignorados).")
+                                        # Atualiza a key do uploader para limpá-lo, o st.rerun() voltará para a aba de Cadastro Individual
+                                        st.session_state["uploader_key"] += 1
                                         time.sleep(1.5)
                                         st.rerun()
 
