@@ -586,16 +586,15 @@ label {{
 
 /* ═══════════════════════════════════════════════════════════════════════════
    SIDEBAR — REFINAMENTO VISUAL
-   Mantém intacta a lógica responsiva que faz o conteúdo acompanhar a sidebar.
    ═══════════════════════════════════════════════════════════════════════════ */
 
 /* Topo mais compacto */
-[data-testid="stSidebar"] .stScrollToBottomContainer > div:first-child {
+[data-testid="stSidebar"] .stScrollToBottomContainer > div:first-child {{
     padding-top: 0.85rem !important;
-}
+}}
 
 /* Identidade: somente o logo */
-.sidebar-brand-wrapper {
+.sidebar-brand-wrapper {{
     height: 56px !important;
     min-height: 56px !important;
     margin: 0 0 0.65rem 0 !important;
@@ -603,23 +602,22 @@ label {{
     gap: 0 !important;
     align-items: center !important;
     justify-content: flex-start !important;
-}
+}}
 
-.sidebar-logo-img {
+.sidebar-logo-img {{
     min-width: 38px !important;
     width: 38px !important;
     height: 38px !important;
     border-width: 1px !important;
     box-shadow: 0 3px 10px rgba(0,0,0,0.25) !important;
-}
+}}
 
-/* O nome da empresa deixa de competir visualmente com os módulos */
-.sidebar-brand-text {
+.sidebar-brand-text {{
     display: none !important;
-}
+}}
 
-/* Menu operacional mais compacto e uniforme */
-[data-testid="stSidebar"] .stButton > button {
+/* Menu operacional mais compacto */
+[data-testid="stSidebar"] .stButton > button {{
     width: calc({SIDEBAR_WIDTH} - 24px) !important;
     min-width: 0 !important;
     height: 42px !important;
@@ -629,35 +627,33 @@ label {{
     padding: 0 11px !important;
     border-radius: 8px !important;
     justify-content: flex-start !important;
-}
+}}
 
-[data-testid="stSidebar"] .stButton > button span.material-symbols-rounded {
+[data-testid="stSidebar"] .stButton > button span.material-symbols-rounded {{
     font-size: 1.25rem !important;
     margin-right: 13px !important;
-}
+}}
 
-[data-testid="stSidebar"] .stButton > button p {
+[data-testid="stSidebar"] .stButton > button p {{
     font-size: 0.82rem !important;
     font-weight: 500 !important;
-}
+}}
 
-/* Item ativo com destaque mais sóbrio */
-[data-testid="stSidebar"] .stButton > button[kind="primary"] {
+[data-testid="stSidebar"] .stButton > button[kind="primary"] {{
     background: #172033 !important;
     color: #F8FAFC !important;
     border-left: 3px solid #6366F1 !important;
     border-radius: 7px !important;
     margin-left: 12px !important;
     padding-left: 9px !important;
-}
+}}
 
-/* Ao abrir por hover, os itens passam a usar a largura disponível */
-[data-testid="stSidebar"]:hover .stButton > button {
+[data-testid="stSidebar"]:hover .stButton > button {{
     width: 236px !important;
-}
+}}
 
-/* ── Pin: somente ícone no canto superior direito ─────────────────────── */
-[data-testid="stSidebar"] .st-key-nav_pin {
+/* Pin — somente ícone no topo direito */
+[data-testid="stSidebar"] .st-key-nav_pin {{
     position: fixed !important;
     top: 20px !important;
     left: calc({SIDEBAR_WIDTH} - 34px) !important;
@@ -667,9 +663,9 @@ label {{
     margin: 0 !important;
     padding: 0 !important;
     transition: left 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
-}
+}}
 
-[data-testid="stSidebar"] .st-key-nav_pin button {
+[data-testid="stSidebar"] .st-key-nav_pin button {{
     width: 26px !important;
     min-width: 26px !important;
     height: 28px !important;
@@ -681,47 +677,47 @@ label {{
     background: transparent !important;
     color: #64748B !important;
     box-shadow: none !important;
-}
+}}
 
-[data-testid="stSidebar"] .st-key-nav_pin button p {
+[data-testid="stSidebar"] .st-key-nav_pin button p {{
     display: none !important;
-}
+}}
 
-[data-testid="stSidebar"] .st-key-nav_pin button span {
+[data-testid="stSidebar"] .st-key-nav_pin button span {{
     margin: 0 !important;
     font-size: 1.15rem !important;
-}
+}}
 
-[data-testid="stSidebar"] .st-key-nav_pin button:hover {
+[data-testid="stSidebar"] .st-key-nav_pin button:hover {{
     background: rgba(255,255,255,0.07) !important;
     color: #F8FAFC !important;
-}
+}}
 
-[data-testid="stSidebar"]:hover .st-key-nav_pin {
+[data-testid="stSidebar"]:hover .st-key-nav_pin {{
     left: 220px !important;
-}
+}}
 
-/* ── Ações secundárias perto do rodapé ───────────────────────────────── */
+/* Ações secundárias próximas do rodapé */
 [data-testid="stSidebar"] .st-key-nav_cfg,
-[data-testid="stSidebar"] .st-key-nav_privacidade {
+[data-testid="stSidebar"] .st-key-nav_privacidade {{
     position: fixed !important;
     left: 12px !important;
     width: calc({SIDEBAR_WIDTH} - 24px) !important;
     z-index: 1000000 !important;
     margin: 0 !important;
     transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
-}
+}}
 
-[data-testid="stSidebar"] .st-key-nav_cfg {
+[data-testid="stSidebar"] .st-key-nav_cfg {{
     bottom: 140px !important;
-}
+}}
 
-[data-testid="stSidebar"] .st-key-nav_privacidade {
+[data-testid="stSidebar"] .st-key-nav_privacidade {{
     bottom: 98px !important;
-}
+}}
 
 [data-testid="stSidebar"] .st-key-nav_cfg button,
-[data-testid="stSidebar"] .st-key-nav_privacidade button {
+[data-testid="stSidebar"] .st-key-nav_privacidade button {{
     width: 100% !important;
     min-width: 0 !important;
     height: 36px !important;
@@ -733,53 +729,52 @@ label {{
     background: transparent !important;
     border-left: none !important;
     font-size: 0.76rem !important;
-}
+}}
 
 [data-testid="stSidebar"] .st-key-nav_cfg button:hover,
-[data-testid="stSidebar"] .st-key-nav_privacidade button:hover {
+[data-testid="stSidebar"] .st-key-nav_privacidade button:hover {{
     color: #CBD5E1 !important;
     background: rgba(255,255,255,0.05) !important;
-}
+}}
 
 [data-testid="stSidebar"]:hover .st-key-nav_cfg,
-[data-testid="stSidebar"]:hover .st-key-nav_privacidade {
+[data-testid="stSidebar"]:hover .st-key-nav_privacidade {{
     width: 236px !important;
-}
+}}
 
-/* Se Configurações ou Privacidade estiverem ativas, destaque discreto */
 [data-testid="stSidebar"] .st-key-nav_cfg button[kind="primary"],
-[data-testid="stSidebar"] .st-key-nav_privacidade button[kind="primary"] {
+[data-testid="stSidebar"] .st-key-nav_privacidade button[kind="primary"] {{
     color: #E2E8F0 !important;
     background: rgba(99,102,241,0.12) !important;
     border-left: none !important;
     padding-left: 10px !important;
-}
+}}
 
-/* ── Perfil fixo e mais compacto ─────────────────────────────────────── */
-.profile-wrapper {
+/* Perfil */
+.profile-wrapper {{
     height: 80px !important;
     padding-left: 13px !important;
     gap: 11px !important;
     border-top: 1px solid #1E293B !important;
-}
+}}
 
-.profile-avatar {
+.profile-avatar {{
     min-width: 40px !important;
     width: 40px !important;
     height: 40px !important;
     font-size: 1rem !important;
-}
+}}
 
-.profile-text strong {
+.profile-text strong {{
     font-size: 0.82rem !important;
-}
+}}
 
-.profile-text span {
+.profile-text span {{
     font-size: 0.68rem !important;
-}
+}}
 
-/* Área clicável do perfil — deixa de depender da posição nth-last-child */
-[data-testid="stSidebar"] .st-key-btn_perfil {
+/* Área clicável do perfil */
+[data-testid="stSidebar"] .st-key-btn_perfil {{
     position: fixed !important;
     left: 8px !important;
     bottom: 8px !important;
@@ -787,9 +782,9 @@ label {{
     height: 62px !important;
     z-index: 1000002 !important;
     margin: 0 !important;
-}
+}}
 
-[data-testid="stSidebar"] .st-key-btn_perfil button {
+[data-testid="stSidebar"] .st-key-btn_perfil button {{
     width: 100% !important;
     height: 100% !important;
     margin: 0 !important;
@@ -798,18 +793,18 @@ label {{
     border: none !important;
     box-shadow: none !important;
     color: transparent !important;
-}
+}}
 
-[data-testid="stSidebar"] .st-key-btn_perfil button * {
+[data-testid="stSidebar"] .st-key-btn_perfil button * {{
     display: none !important;
-}
+}}
 
-[data-testid="stSidebar"]:hover .st-key-btn_perfil {
+[data-testid="stSidebar"]:hover .st-key-btn_perfil {{
     width: 182px !important;
-}
+}}
 
-/* Logout — aparece somente quando há espaço para ele */
-[data-testid="stSidebar"] .st-key-nav_logout {
+/* Logout */
+[data-testid="stSidebar"] .st-key-nav_logout {{
     position: fixed !important;
     left: calc({SIDEBAR_WIDTH} - 48px) !important;
     bottom: 19px !important;
@@ -822,9 +817,9 @@ label {{
     transition:
         left 0.3s cubic-bezier(0.4, 0, 0.2, 1),
         opacity 0.2s !important;
-}
+}}
 
-[data-testid="stSidebar"] .st-key-nav_logout button {
+[data-testid="stSidebar"] .st-key-nav_logout button {{
     width: 34px !important;
     min-width: 34px !important;
     height: 40px !important;
@@ -836,28 +831,27 @@ label {{
     color: #EF4444 !important;
     border: none !important;
     box-shadow: none !important;
-}
+}}
 
-[data-testid="stSidebar"] .st-key-nav_logout button p {
+[data-testid="stSidebar"] .st-key-nav_logout button p {{
     display: none !important;
-}
+}}
 
-[data-testid="stSidebar"] .st-key-nav_logout button span {
+[data-testid="stSidebar"] .st-key-nav_logout button span {{
     margin: 0 !important;
     font-size: 1.3rem !important;
-}
+}}
 
-[data-testid="stSidebar"]:hover .st-key-nav_logout {
+[data-testid="stSidebar"]:hover .st-key-nav_logout {{
     left: 212px !important;
     opacity: 1 !important;
     pointer-events: auto !important;
-}
+}}
 
-/* O menu aberto permanece com a largura original de 260px */
 [data-testid="stSidebar"]:hover .sidebar-brand-wrapper,
-[data-testid="stSidebar"]:hover .profile-wrapper {
+[data-testid="stSidebar"]:hover .profile-wrapper {{
     width: 260px !important;
-}
+}}
 
 </style>
 """
