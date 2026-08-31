@@ -73,24 +73,19 @@ a.header-anchor {{
 }}
 
 .block-container {{
-    width: 100% !important;
-    max-width: 1800px !important;
-    margin-left: auto !important;
-    margin-right: auto !important;
-    padding: 2rem clamp(1.25rem, 2vw, 2.25rem) 2rem !important;
+    /* Mantém o ponto de início original à esquerda e aproveita somente a área livre à direita */
+    width: calc(100% - 2.5rem) !important;
+    max-width: none !important;
+    margin-left: 0 !important;
+    margin-right: 0 !important;
+    padding: 2rem 2.5rem 2rem !important;
     box-sizing: border-box !important;
-}}
-
-/* Aproveita melhor monitores grandes sem comprometer notebooks menores */
-@media (min-width: 1600px) {{
-    .block-container {{
-        max-width: 1800px !important;
-    }}
 }}
 
 @media (max-width: 1200px) {{
     .block-container {{
-        padding-left: 1.25rem !important;
+        width: 100% !important;
+        padding-left: 2.5rem !important;
         padding-right: 1.25rem !important;
     }}
 }}
@@ -114,9 +109,6 @@ a.header-anchor {{
 
 [data-testid="stAppViewContainer"] > section.main {{
     padding-left: 82px !important;
-    width: 100% !important;
-    max-width: none !important;
-    box-sizing: border-box !important;
 }}
 
 /* Força a barra lateral a colar no topo, removendo o gap nativo do Streamlit */
