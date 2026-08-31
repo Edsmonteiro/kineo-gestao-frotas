@@ -45,6 +45,15 @@ TEXT_VISIBILITY = "visible" if pinned else "hidden"
 BUTTON_WIDTH = "calc(100% - 34px)" if pinned else "48px"
 POINTER_EVENTS = "auto" if pinned else "none"
 
+# Geometria visual interna da sidebar
+SIDEBAR_ITEM_WIDTH = "236px" if pinned else "48px"
+SIDEBAR_ITEM_LEFT = "12px" if pinned else "17px"
+SIDEBAR_ITEM_JUSTIFY = "flex-start" if pinned else "center"
+SIDEBAR_ITEM_PADDING = "0 12px" if pinned else "0"
+SIDEBAR_PIN_LEFT = "224px" if pinned else "52px"
+SIDEBAR_BRAND_JUSTIFY = "flex-start" if pinned else "center"
+SIDEBAR_PROFILE_PADDING = "16px" if pinned else "21px"
+
 css_template = f"""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
@@ -585,203 +594,304 @@ label {{
 }}
 
 /* ═══════════════════════════════════════════════════════════════════════════
-   SIDEBAR — REFINAMENTO VISUAL
+   SIDEBAR KINEO — V2
+   Redesenho visual sem alterar a mecânica 82px / 260px já aprovada.
    ═══════════════════════════════════════════════════════════════════════════ */
 
-/* Topo mais compacto */
+/* A coluna interna realmente trabalha como uma sidebar vertical */
 [data-testid="stSidebar"] .stScrollToBottomContainer > div:first-child {{
-    padding-top: 0.85rem !important;
+    display: flex !important;
+    flex-direction: column !important;
+    min-height: 100vh !important;
+    padding: 14px 0 0 !important;
+    box-sizing: border-box !important;
 }}
 
-/* Identidade: somente o logo */
+/* Garante que o vertical block possa distribuir topo / navegação / rodapé */
+[data-testid="stSidebar"] [data-testid="stVerticalBlock"] {{
+    min-height: calc(100vh - 14px) !important;
+}}
+
+/* ── Identidade ─────────────────────────────────────────────────────────── */
 .sidebar-brand-wrapper {{
-    height: 56px !important;
-    min-height: 56px !important;
-    margin: 0 0 0.65rem 0 !important;
-    padding: 0 0 0 12px !important;
-    gap: 0 !important;
+    width: {SIDEBAR_WIDTH} !important;
+    height: 58px !important;
+    min-height: 58px !important;
+    margin: 0 0 10px 0 !important;
+    padding: 0 18px !important;
+    display: flex !important;
     align-items: center !important;
-    justify-content: flex-start !important;
+    justify-content: {SIDEBAR_BRAND_JUSTIFY} !important;
+    gap: 0 !important;
+    box-sizing: border-box !important;
+    overflow: hidden !important;
+    transition: width 0.3s cubic-bezier(0.4,0,0.2,1) !important;
 }}
 
 .sidebar-logo-img {{
-    min-width: 38px !important;
-    width: 38px !important;
-    height: 38px !important;
-    border-width: 1px !important;
-    box-shadow: 0 3px 10px rgba(0,0,0,0.25) !important;
+    min-width: 40px !important;
+    width: 40px !important;
+    height: 40px !important;
+    border: 1px solid rgba(99,102,241,0.85) !important;
+    box-shadow: 0 4px 14px rgba(0,0,0,0.28) !important;
 }}
 
+/* O logo já identifica a empresa. O nome não compete com a navegação. */
 .sidebar-brand-text {{
     display: none !important;
 }}
 
-/* Menu operacional mais compacto */
-[data-testid="stSidebar"] .stButton > button {{
-    width: calc({SIDEBAR_WIDTH} - 24px) !important;
-    min-width: 0 !important;
-    height: 42px !important;
-    min-height: 42px !important;
-    margin-left: 12px !important;
-    margin-bottom: 6px !important;
-    padding: 0 11px !important;
-    border-radius: 8px !important;
+[data-testid="stSidebar"]:hover .sidebar-brand-wrapper {{
+    width: 260px !important;
     justify-content: flex-start !important;
 }}
 
+/* ── Navegação principal ───────────────────────────────────────────────── */
+[data-testid="stSidebar"] .stButton > button {{
+    width: {SIDEBAR_ITEM_WIDTH} !important;
+    min-width: {SIDEBAR_ITEM_WIDTH} !important;
+    height: 42px !important;
+    min-height: 42px !important;
+    margin: 0 0 5px {SIDEBAR_ITEM_LEFT} !important;
+    padding: {SIDEBAR_ITEM_PADDING} !important;
+    border: 1px solid transparent !important;
+    border-radius: 8px !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: {SIDEBAR_ITEM_JUSTIFY} !important;
+    overflow: hidden !important;
+    white-space: nowrap !important;
+    background: transparent !important;
+    color: #8FA1B9 !important;
+    box-shadow: none !important;
+    transform: none !important;
+    transition:
+        width 0.3s cubic-bezier(0.4,0,0.2,1),
+        margin-left 0.3s cubic-bezier(0.4,0,0.2,1),
+        background-color 0.16s ease,
+        color 0.16s ease !important;
+}}
+
+[data-testid="stSidebar"] .stButton > button:hover {{
+    background: rgba(148,163,184,0.08) !important;
+    color: #E5EDF7 !important;
+    transform: none !important;
+}}
+
 [data-testid="stSidebar"] .stButton > button span.material-symbols-rounded {{
-    font-size: 1.25rem !important;
-    margin-right: 13px !important;
+    flex: 0 0 auto !important;
+    font-size: 1.22rem !important;
+    margin: 0 12px 0 0 !important;
 }}
 
 [data-testid="stSidebar"] .stButton > button p {{
-    font-size: 0.82rem !important;
+    margin: 0 !important;
+    font-size: 0.80rem !important;
+    line-height: 1 !important;
     font-weight: 500 !important;
+    letter-spacing: -0.01em !important;
+    opacity: {TEXT_OPACITY} !important;
+    visibility: {TEXT_VISIBILITY} !important;
+    transition: opacity 0.16s ease !important;
 }}
 
+/* Recolhida: ícone rigorosamente centralizado */
+[data-testid="stSidebar"] .stButton > button {{
+    --kineo-icon-gap: 0px;
+}}
+
+[data-testid="stSidebar"] .stButton > button span.material-symbols-rounded {{
+    margin-right: 0 !important;
+}}
+
+/* Fixada: texto + ícone */
+[data-testid="stSidebar"][style*="260px"] .stButton > button span.material-symbols-rounded {{
+    margin-right: 12px !important;
+}}
+
+/* Hover: o mesmo padrão da sidebar fixada */
+[data-testid="stSidebar"]:hover .stButton > button {{
+    width: 236px !important;
+    min-width: 236px !important;
+    margin-left: 12px !important;
+    padding: 0 12px !important;
+    justify-content: flex-start !important;
+}}
+
+[data-testid="stSidebar"]:hover .stButton > button span.material-symbols-rounded {{
+    margin-right: 12px !important;
+}}
+
+[data-testid="stSidebar"]:hover .stButton > button p {{
+    opacity: 1 !important;
+    visibility: visible !important;
+}}
+
+/* Item selecionado: bloco discreto, sem deslocar o ícone */
 [data-testid="stSidebar"] .stButton > button[kind="primary"] {{
     background: #172033 !important;
     color: #F8FAFC !important;
-    border-left: 3px solid #6366F1 !important;
-    border-radius: 7px !important;
-    margin-left: 12px !important;
-    padding-left: 9px !important;
+    border: 1px solid rgba(99,102,241,0.12) !important;
+    box-shadow: inset 3px 0 0 #6366F1 !important;
+    border-radius: 8px !important;
+    margin-left: {SIDEBAR_ITEM_LEFT} !important;
+    padding: {SIDEBAR_ITEM_PADDING} !important;
 }}
 
-[data-testid="stSidebar"]:hover .stButton > button {{
-    width: 236px !important;
+/* ── Espaçador real ────────────────────────────────────────────────────── */
+.sidebar-spacer {{
+    height: 1px !important;
+    min-height: 1px !important;
 }}
 
-/* Pin — somente ícone no topo direito */
+[data-testid="stSidebar"] [data-testid="stVerticalBlock"] > div:has(.sidebar-spacer) {{
+    flex: 1 1 auto !important;
+    min-height: 36px !important;
+}}
+
+/* ── Pin: único controle flutuante no topo ─────────────────────────────── */
 [data-testid="stSidebar"] .st-key-nav_pin {{
     position: fixed !important;
-    top: 20px !important;
-    left: calc({SIDEBAR_WIDTH} - 34px) !important;
-    width: 26px !important;
+    top: 15px !important;
+    left: {SIDEBAR_PIN_LEFT} !important;
+    width: 22px !important;
     height: 28px !important;
-    z-index: 1000001 !important;
     margin: 0 !important;
     padding: 0 !important;
-    transition: left 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
+    z-index: 1000002 !important;
+    transition: left 0.3s cubic-bezier(0.4,0,0.2,1) !important;
 }}
 
 [data-testid="stSidebar"] .st-key-nav_pin button {{
-    width: 26px !important;
-    min-width: 26px !important;
+    width: 22px !important;
+    min-width: 22px !important;
     height: 28px !important;
     min-height: 28px !important;
     margin: 0 !important;
     padding: 0 !important;
-    border-radius: 7px !important;
+    display: flex !important;
+    align-items: center !important;
     justify-content: center !important;
     background: transparent !important;
     color: #64748B !important;
+    border: none !important;
+    border-radius: 6px !important;
     box-shadow: none !important;
+}}
+
+[data-testid="stSidebar"] .st-key-nav_pin button:hover {{
+    background: rgba(148,163,184,0.08) !important;
+    color: #CBD5E1 !important;
 }}
 
 [data-testid="stSidebar"] .st-key-nav_pin button p {{
     display: none !important;
 }}
 
-[data-testid="stSidebar"] .st-key-nav_pin button span {{
+[data-testid="stSidebar"] .st-key-nav_pin button span.material-symbols-rounded {{
     margin: 0 !important;
-    font-size: 1.15rem !important;
-}}
-
-[data-testid="stSidebar"] .st-key-nav_pin button:hover {{
-    background: rgba(255,255,255,0.07) !important;
-    color: #F8FAFC !important;
+    font-size: 1.05rem !important;
 }}
 
 [data-testid="stSidebar"]:hover .st-key-nav_pin {{
-    left: 220px !important;
+    left: 224px !important;
 }}
 
-/* Ações secundárias próximas do rodapé */
-[data-testid="stSidebar"] .st-key-nav_cfg,
-[data-testid="stSidebar"] .st-key-nav_privacidade {{
-    position: fixed !important;
-    left: 12px !important;
-    width: calc({SIDEBAR_WIDTH} - 24px) !important;
-    z-index: 1000000 !important;
-    margin: 0 !important;
-    transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
-}}
-
-[data-testid="stSidebar"] .st-key-nav_cfg {{
-    bottom: 140px !important;
-}}
-
-[data-testid="stSidebar"] .st-key-nav_privacidade {{
-    bottom: 98px !important;
-}}
-
+/* ── Configurações + Privacidade: ações secundárias ───────────────────── */
 [data-testid="stSidebar"] .st-key-nav_cfg button,
 [data-testid="stSidebar"] .st-key-nav_privacidade button {{
-    width: 100% !important;
-    min-width: 0 !important;
     height: 36px !important;
     min-height: 36px !important;
-    margin: 0 !important;
-    padding: 0 10px !important;
-    border-radius: 7px !important;
+    margin-bottom: 3px !important;
     color: #64748B !important;
-    background: transparent !important;
-    border-left: none !important;
-    font-size: 0.76rem !important;
+    font-size: 0.75rem !important;
 }}
 
 [data-testid="stSidebar"] .st-key-nav_cfg button:hover,
 [data-testid="stSidebar"] .st-key-nav_privacidade button:hover {{
     color: #CBD5E1 !important;
-    background: rgba(255,255,255,0.05) !important;
+    background: rgba(148,163,184,0.055) !important;
 }}
 
-[data-testid="stSidebar"]:hover .st-key-nav_cfg,
-[data-testid="stSidebar"]:hover .st-key-nav_privacidade {{
-    width: 236px !important;
-}}
-
+/* Não deixar uma ação secundária parecer um módulo principal */
 [data-testid="stSidebar"] .st-key-nav_cfg button[kind="primary"],
 [data-testid="stSidebar"] .st-key-nav_privacidade button[kind="primary"] {{
-    color: #E2E8F0 !important;
-    background: rgba(99,102,241,0.12) !important;
-    border-left: none !important;
-    padding-left: 10px !important;
+    background: rgba(99,102,241,0.09) !important;
+    color: #CBD5E1 !important;
+    border: 1px solid transparent !important;
+    box-shadow: none !important;
 }}
 
-/* Perfil */
+/* O bloco protetor antes do perfil fica menor e previsível */
+[data-testid="stSidebar"] [data-testid="stVerticalBlock"] > div:has(> div[style*="height: 85px"]) {{
+    flex: 0 0 76px !important;
+}}
+
+/* ── Perfil ────────────────────────────────────────────────────────────── */
 .profile-wrapper {{
-    height: 80px !important;
-    padding-left: 13px !important;
-    gap: 11px !important;
-    border-top: 1px solid #1E293B !important;
+    position: fixed !important;
+    left: 0 !important;
+    bottom: 0 !important;
+    width: {SIDEBAR_WIDTH} !important;
+    height: 76px !important;
+    padding: 0 12px 0 {SIDEBAR_PROFILE_PADDING} !important;
+    display: flex !important;
+    align-items: center !important;
+    gap: 10px !important;
+    background: #0B1120 !important;
+    border-top: 1px solid #1B2638 !important;
+    box-sizing: border-box !important;
+    z-index: 100 !important;
+    transition: width 0.3s cubic-bezier(0.4,0,0.2,1),
+                padding-left 0.3s cubic-bezier(0.4,0,0.2,1) !important;
 }}
 
 .profile-avatar {{
     min-width: 40px !important;
     width: 40px !important;
     height: 40px !important;
-    font-size: 1rem !important;
+    font-size: 0.95rem !important;
+    border: 1px solid rgba(59,130,246,0.55) !important;
+    box-shadow: 0 3px 10px rgba(0,0,0,0.20) !important;
+}}
+
+.profile-text {{
+    opacity: {TEXT_OPACITY} !important;
+    visibility: {TEXT_VISIBILITY} !important;
+    min-width: 0 !important;
 }}
 
 .profile-text strong {{
-    font-size: 0.82rem !important;
+    font-size: 0.80rem !important;
+    color: #F8FAFC !important;
+    font-weight: 600 !important;
 }}
 
 .profile-text span {{
+    margin-top: 2px !important;
     font-size: 0.68rem !important;
+    color: #64748B !important;
 }}
 
-/* Área clicável do perfil */
+[data-testid="stSidebar"]:hover .profile-wrapper {{
+    width: 260px !important;
+    padding-left: 16px !important;
+}}
+
+[data-testid="stSidebar"]:hover .profile-text {{
+    opacity: 1 !important;
+    visibility: visible !important;
+}}
+
+/* Clique no perfil: overlay transparente só sobre avatar/texto */
 [data-testid="stSidebar"] .st-key-btn_perfil {{
     position: fixed !important;
     left: 8px !important;
-    bottom: 8px !important;
+    bottom: 7px !important;
     width: 58px !important;
     height: 62px !important;
-    z-index: 1000002 !important;
     margin: 0 !important;
+    z-index: 101 !important;
 }}
 
 [data-testid="stSidebar"] .st-key-btn_perfil button {{
@@ -790,9 +900,9 @@ label {{
     margin: 0 !important;
     padding: 0 !important;
     background: transparent !important;
+    color: transparent !important;
     border: none !important;
     box-shadow: none !important;
-    color: transparent !important;
 }}
 
 [data-testid="stSidebar"] .st-key-btn_perfil button * {{
@@ -800,57 +910,62 @@ label {{
 }}
 
 [data-testid="stSidebar"]:hover .st-key-btn_perfil {{
-    width: 182px !important;
+    width: 184px !important;
 }}
 
-/* Logout */
+/* Logout permanece discreto no extremo direito do perfil */
 [data-testid="stSidebar"] .st-key-nav_logout {{
     position: fixed !important;
-    left: calc({SIDEBAR_WIDTH} - 48px) !important;
-    bottom: 19px !important;
-    width: 34px !important;
+    bottom: 18px !important;
+    left: 210px !important;
+    width: 36px !important;
     height: 40px !important;
-    z-index: 1000003 !important;
     margin: 0 !important;
+    z-index: 102 !important;
     opacity: {TEXT_OPACITY} !important;
+    visibility: {TEXT_VISIBILITY} !important;
     pointer-events: {POINTER_EVENTS} !important;
-    transition:
-        left 0.3s cubic-bezier(0.4, 0, 0.2, 1),
-        opacity 0.2s !important;
 }}
 
 [data-testid="stSidebar"] .st-key-nav_logout button {{
-    width: 34px !important;
-    min-width: 34px !important;
+    width: 36px !important;
+    min-width: 36px !important;
     height: 40px !important;
     min-height: 40px !important;
     margin: 0 !important;
     padding: 0 !important;
     justify-content: center !important;
     background: transparent !important;
-    color: #EF4444 !important;
+    color: #F05252 !important;
     border: none !important;
+    border-radius: 7px !important;
     box-shadow: none !important;
+}}
+
+[data-testid="stSidebar"] .st-key-nav_logout button:hover {{
+    background: rgba(239,68,68,0.10) !important;
 }}
 
 [data-testid="stSidebar"] .st-key-nav_logout button p {{
     display: none !important;
 }}
 
-[data-testid="stSidebar"] .st-key-nav_logout button span {{
+[data-testid="stSidebar"] .st-key-nav_logout button span.material-symbols-rounded {{
     margin: 0 !important;
-    font-size: 1.3rem !important;
+    font-size: 1.22rem !important;
 }}
 
 [data-testid="stSidebar"]:hover .st-key-nav_logout {{
-    left: 212px !important;
     opacity: 1 !important;
+    visibility: visible !important;
     pointer-events: auto !important;
 }}
 
-[data-testid="stSidebar"]:hover .sidebar-brand-wrapper,
-[data-testid="stSidebar"]:hover .profile-wrapper {{
-    width: 260px !important;
+/* Neutraliza especificamente os seletores antigos baseados em nth-last-child.
+   A partir daqui perfil/logout são controlados por suas keys. */
+[data-testid="stSidebar"] [data-testid="stVerticalBlock"] > div:nth-last-child(2) button,
+[data-testid="stSidebar"] [data-testid="stVerticalBlock"] > div:nth-last-child(1) button {{
+    transform: none !important;
 }}
 
 </style>
