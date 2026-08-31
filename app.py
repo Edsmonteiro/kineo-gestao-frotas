@@ -23,6 +23,7 @@ for key, default in [
     ("bloqueado_ate", 0),
     ("tela_config", False),
     ("sidebar_pinned", False),
+    ("cookies_aviso_visto", False),
     ("uploader_key", 0), # Chave para resetar o uploader de planilhas
 ]:
     if key not in st.session_state:
@@ -235,6 +236,60 @@ body:has([data-testid="stSidebar"]:hover) [data-testid="stAppViewContainer"] {{
     border-radius: 0 8px 8px 0 !important; 
     margin-left: -16px !important; 
     padding-left: 29px !important; 
+}}
+
+/* Link discreto de Privacidade/Cookies no rodapé operacional da sidebar */
+[data-testid="stSidebar"] .st-key-nav_privacidade button {{
+    height: 36px !important;
+    min-height: 36px !important;
+    color: #64748B !important;
+    font-size: 0.75rem !important;
+    margin-top: 2px !important;
+    margin-bottom: 4px !important;
+}}
+
+[data-testid="stSidebar"] .st-key-nav_privacidade button:hover {{
+    color: #CBD5E1 !important;
+    background-color: rgba(255,255,255,0.04) !important;
+}}
+
+.privacy-section {{
+    padding: 1rem 0;
+    border-bottom: 1px solid #E5E7EB;
+}}
+
+.privacy-section:last-child {{
+    border-bottom: none;
+}}
+
+.kineo-404 {{
+    max-width: 720px;
+    margin: 6vh auto 1.5rem;
+    text-align: center;
+    background: #FFFFFF;
+    border: 1px solid #E5E7EB;
+    border-radius: 16px;
+    padding: 3rem 2rem;
+    box-shadow: 0 10px 30px rgba(15, 23, 42, 0.06);
+}}
+
+.kineo-404-code {{
+    font-size: clamp(4rem, 10vw, 7rem);
+    font-weight: 800;
+    line-height: 1;
+    letter-spacing: -0.06em;
+    color: #6366F1;
+}}
+
+.kineo-404 h2 {{
+    margin: 0.75rem 0 0.5rem;
+    color: #111827;
+}}
+
+.kineo-404 p {{
+    color: #64748B;
+    max-width: 520px;
+    margin: 0 auto;
 }}
 
 .profile-wrapper {{
@@ -657,12 +712,59 @@ def set_perfil():
     st.session_state["tela_config"] = False
     st.session_state["ultimo_menu"] = "Meu Perfil"
 
+def set_privacidade():
+    st.session_state["tela_config"] = False
+    st.session_state["ultimo_menu"] = "Política de Privacidade"
+
 def toggle_pin():
     st.session_state["sidebar_pinned"] = not st.session_state["sidebar_pinned"]
 
 def efetuar_logout():
     st.session_state["autenticado"] = False
     st.session_state["tela_config"] = False
+    st.session_state["cookies_aviso_visto"] = False
+
+
+def _conteudo_aviso_cookies():
+    st.markdown(
+        "O Kineo utiliza recursos técnicos de sessão e preferências necessários "
+        "para autenticação, segurança e funcionamento da interface. "
+        "O aplicativo não implementa cookies próprios de publicidade comportamental."
+    )
+    st.caption(
+        "Este aviso é apresentado uma vez por sessão de acesso. "
+        "Mais detalhes estão disponíveis na Política de Privacidade."
+    )
+
+    c_cookie_1, c_cookie_2 = st.columns(2)
+
+    if c_cookie_1.button(
+        "Entendi e continuar",
+        type="primary",
+        use_container_width=True,
+        key="cookie_entendi"
+    ):
+        st.session_state["cookies_aviso_visto"] = True
+        st.rerun()
+
+    if c_cookie_2.button(
+        "Política de Privacidade",
+        use_container_width=True,
+        key="cookie_privacidade"
+    ):
+        st.session_state["cookies_aviso_visto"] = True
+        set_privacidade()
+        st.rerun()
+
+
+if hasattr(st, "dialog"):
+    aviso_cookies = st.dialog(
+        "Privacidade e cookies",
+        width="small"
+    )(_conteudo_aviso_cookies)
+else:
+    # Fallback para versões antigas do Streamlit.
+    aviso_cookies = _conteudo_aviso_cookies
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -857,6 +959,16 @@ else:
                 key="nav_cfg"
             )
 
+        # Privacidade/Cookies: acesso discreto, disponível para todos os perfis
+        st.button(
+            "Privacidade · Cookies",
+            icon=":material/policy:",
+            type="primary" if tela_ativa == "Política de Privacidade" else "secondary",
+            use_container_width=True,
+            on_click=set_privacidade,
+            key="nav_privacidade"
+        )
+
         # Espaço protetor estrito para acomodar exatamente a altura do perfil sem gerar scroll
         st.markdown('<div style="height: 85px;"></div>', unsafe_allow_html=True)
 
@@ -895,6 +1007,10 @@ else:
             key="nav_logout",
             on_click=efetuar_logout
         )
+
+    # Transparência sobre sessão/cookies: uma vez por login/sessão.
+    if not st.session_state.get("cookies_aviso_visto", False):
+        aviso_cookies()
 
 
     with st.spinner("Processando..."):
@@ -2658,6 +2774,109 @@ else:
                                     st.success("Senha alterada com sucesso!")
 
         # ══════════════════════════════════════════════════════════════════════════
+        # POLÍTICA DE PRIVACIDADE E COOKIES
+        # ══════════════════════════════════════════════════════════════════════════
+        elif tela_ativa == "Política de Privacidade":
+            page_header(
+                "Política de Privacidade",
+                "Transparência sobre o tratamento de dados no ambiente Kineo."
+            )
+
+            st.caption("Última atualização: 31 de agosto de 2026")
+
+            with st.container(border=True):
+                st.markdown("### 1. Escopo")
+                st.markdown(
+                    "Esta política descreve como o **Kineo | Gestão de Frotas** trata "
+                    "informações necessárias à administração corporativa de veículos, "
+                    "contratos, custos, cobranças e usuários autorizados."
+                )
+
+                st.markdown("### 2. Dados tratados")
+                st.markdown(
+                    "Podem ser tratados dados de identificação e acesso de colaboradores; "
+                    "informações cadastrais de empresas e clientes; dados de veículos, quilometragem "
+                    "e manutenção; contratos e informações financeiras operacionais; além de arquivos "
+                    "enviados ao sistema, como comprovantes e documentos relacionados à operação."
+                )
+
+                st.markdown("### 3. Finalidades")
+                st.markdown(
+                    "Os dados são utilizados para autenticação e controle de acesso, gestão da frota, "
+                    "acompanhamento de contratos e substituições de veículos, registro de custos, "
+                    "cobranças, relatórios gerenciais, segurança do ambiente e manutenção de registros "
+                    "necessários à operação da organização."
+                )
+
+                st.markdown("### 4. Bases legais e responsabilidades")
+                st.markdown(
+                    "O tratamento deve observar a **Lei Geral de Proteção de Dados (LGPD)** e outras "
+                    "normas aplicáveis. Conforme o contexto, a organização responsável pelo ambiente "
+                    "poderá tratar dados para execução de contratos, cumprimento de obrigações legais "
+                    "ou regulatórias, exercício regular de direitos e legítimos interesses, quando "
+                    "cabíveis. A definição da base legal aplicável a cada operação cabe à organização "
+                    "responsável pelo uso do ambiente."
+                )
+
+                st.markdown("### 5. Sessão, cookies e preferências")
+                st.markdown(
+                    "O Kineo utiliza recursos técnicos necessários para manter a sessão autenticada, "
+                    "proteger o acesso e preservar preferências de interface durante a utilização. "
+                    "O aplicativo não implementa cookies próprios para publicidade comportamental. "
+                    "Serviços de infraestrutura utilizados para hospedar a aplicação podem adotar "
+                    "mecanismos técnicos próprios necessários ao funcionamento e à segurança da plataforma."
+                )
+
+                st.markdown("### 6. Compartilhamento")
+                st.markdown(
+                    "As informações devem permanecer restritas a usuários autorizados e a prestadores "
+                    "de infraestrutura indispensáveis à operação do sistema, observados os contratos, "
+                    "controles de acesso e deveres de confidencialidade aplicáveis."
+                )
+
+                st.markdown("### 7. Segurança e retenção")
+                st.markdown(
+                    "O acesso ao sistema é autenticado e separado por perfis e empresas. A retenção "
+                    "de registros deve considerar a finalidade operacional, obrigações legais, "
+                    "necessidades de auditoria e políticas internas da organização. Dados que deixem "
+                    "de ser necessários devem ser eliminados ou anonimizados quando aplicável."
+                )
+
+                st.markdown("### 8. Direitos dos titulares")
+                st.markdown(
+                    "Quando aplicável, titulares podem solicitar informações sobre tratamento, acesso, "
+                    "correção, anonimização, bloqueio, eliminação, portabilidade e demais direitos "
+                    "previstos na LGPD. As solicitações devem ser encaminhadas ao canal oficial de "
+                    "privacidade da organização responsável pelo ambiente Kineo."
+                )
+
+                st.markdown("### 9. Atualizações desta política")
+                st.markdown(
+                    "Esta política pode ser atualizada para refletir mudanças no sistema, na operação "
+                    "ou em requisitos legais. A data de atualização será indicada no início desta página."
+                )
+
+            p1, p2 = st.columns([1, 1])
+            if p1.button(
+                "Voltar ao Painel Gerencial",
+                icon=":material/arrow_back:",
+                use_container_width=True,
+                key="privacidade_voltar_painel"
+            ):
+                set_menu("Painel Gerencial")
+                st.rerun()
+
+            if p2.button(
+                "Rever aviso de cookies",
+                icon=":material/cookie:",
+                use_container_width=True,
+                key="privacidade_rever_cookies"
+            ):
+                st.session_state["cookies_aviso_visto"] = False
+                st.rerun()
+
+
+        # ══════════════════════════════════════════════════════════════════════════
         # CONFIGURAÇÕES (ADMIN)
         # ══════════════════════════════════════════════════════════════════════════
         elif tela_ativa == "Configurações":
@@ -2777,3 +2996,33 @@ else:
                                 st.success("Branding atualizado com sucesso!")
                                 time.sleep(0.5)
                                 st.rerun()
+
+        # ══════════════════════════════════════════════════════════════════════════
+        # 404 INTERNA / ESTADO DE NAVEGAÇÃO INVÁLIDO
+        # ══════════════════════════════════════════════════════════════════════════
+        else:
+            st.markdown(
+                """
+                <div class="kineo-404">
+                    <div class="kineo-404-code">404</div>
+                    <h2>Página não encontrada</h2>
+                    <p>
+                        A área que você tentou acessar não existe ou não está disponível
+                        neste ambiente. Use o botão abaixo para retornar ao painel principal.
+                    </p>
+                </div>
+                """,
+                unsafe_allow_html=True
+            )
+
+            _, col_404, _ = st.columns([1, 1.4, 1])
+            with col_404:
+                st.button(
+                    "Voltar ao Painel Gerencial",
+                    icon=":material/home:",
+                    type="primary",
+                    use_container_width=True,
+                    on_click=set_menu,
+                    args=("Painel Gerencial",),
+                    key="btn_404_painel"
+                )
