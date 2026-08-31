@@ -73,15 +73,10 @@ a.header-anchor {{
 }}
 
 .block-container {{
-    /*
-       Mantém exatamente o recuo esquerdo que o layout original de 1280px
-       teria quando centralizado e usa somente o espaço livre à direita.
-    */
-    padding: 2rem 2.5rem 2rem !important;
+    width: 100% !important;
     max-width: none !important;
-    width: auto !important;
-    margin-left: max(0px, calc((100% - 1280px) / 2)) !important;
-    margin-right: 0 !important;
+    margin: 0 !important;
+    padding: 2rem 2.5rem 2rem !important;
     box-sizing: border-box !important;
 }}
 
@@ -103,7 +98,31 @@ a.header-anchor {{
 }}
 
 [data-testid="stAppViewContainer"] > section.main {{
-    padding-left: 82px !important;
+    padding-left: {SIDEBAR_WIDTH} !important;
+    width: 100% !important;
+    max-width: none !important;
+    box-sizing: border-box !important;
+    transition: padding-left 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
+}}
+
+/*
+   Sidebar recolhida: 82px.
+   Sidebar fixada: 260px via SIDEBAR_WIDTH.
+   Em hover, a sidebar abre para 260px e o conteúdo acompanha.
+*/
+[data-testid="stAppViewContainer"]:has([data-testid="stSidebar"]:hover) > section.main {{
+    padding-left: 260px !important;
+}}
+
+body:has([data-testid="stSidebar"]:hover) [data-testid="stAppViewContainer"] > section.main {{
+    padding-left: 260px !important;
+}}
+
+@media (max-width: 1100px) {{
+    .block-container {{
+        padding-left: 1.5rem !important;
+        padding-right: 1.5rem !important;
+    }}
 }}
 
 /* Força a barra lateral a colar no topo, removendo o gap nativo do Streamlit */
