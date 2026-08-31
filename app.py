@@ -1975,192 +1975,846 @@ else:
         # GESTÃO DE CUSTOS
         # ══════════════════════════════════════════════════════════════════════════
         elif tela_ativa == "Gestão de Custos":
-            page_header("Gestão de Custos", "Registre e acompanhe todas as despesas da frota.")
+            page_header(
+                "Gestão de Custos",
+                "Registre despesas e gerencie os lançamentos financeiros da frota."
+            )
 
-            df_veiculos = carregar_dados_tabela(f"SELECT id, placa, modelo FROM veiculos WHERE empresa_id={emp_id}", emp_id)
+            df_veiculos = carregar_dados_tabela(f"""
+                SELECT id, placa, modelo, km_atual, status
+                FROM veiculos
+                WHERE empresa_id={emp_id}
+                ORDER BY modelo, placa
+            """, emp_id)
+
             if df_veiculos.empty:
-                st.warning("Cadastre ao menos um veículo antes de registrar custos.", icon=None)
+                st.warning(
+                    "Cadastre ao menos um veículo antes de registrar custos.",
+                    icon=None
+                )
             else:
-                opcoes_v = {f"{r['modelo']} ({r['placa']})": r["id"] for _, r in df_veiculos.iterrows()}
+                CATEGORIAS = [
+                    "Combustível",
+                    "Manutenção Preventiva",
+                    "Manutenção Corretiva",
+                    "Custos com Motorista",
+                    "Impostos/Documentação",
+                    "Multas",
+                    "Outros"
+                ]
 
-                with st.expander("Registrar nova despesa", expanded=True):
-                    CATEGORIAS = [
-                        "Combustível", "Manutenção Preventiva", "Manutenção Corretiva",
-                        "Custos com Motorista", "Impostos/Documentação", "Multas", "Outros"
-                    ]
-                    cat = st.selectbox("Categoria", CATEGORIAS)
+                FORMAS_PAGAMENTO = [
+                    "Pix",
+                    "Dinheiro",
+                    "PR",
+                    "Cartão de Crédito"
+                ]
 
-                    ca, cb, cc = st.columns(3)
-                    veiculo_sel = ca.selectbox("Veículo", list(opcoes_v.keys()))
-                    data_custo  = cb.date_input("Data (Compra ou 1ª Parcela)", format="DD/MM/YYYY")
-                    km_atual    = cc.number_input("KM no momento", min_value=0.0, step=50.0, value=0.0)
+                opcoes_v = {
+                    f"{r['modelo']} · {r['placa']}": int(r["id"])
+                    for _, r in df_veiculos.iterrows()
+                }
 
-                    cd, ce, cf = st.columns(3)
-                    valor      = cd.number_input("Valor total (R$)", min_value=0.01, step=10.0, value=0.01)
-                    descricao = ce.text_input("Descrição do serviço/peça")
-                    litros    = cf.number_input("Litros abastecidos", min_value=0.1, step=5.0, value=0.1) if cat == "Combustível" else None
+                tab_lancar, tab_lancamentos = st.tabs([
+                    "Registrar despesa",
+                    "Lançamentos financeiros"
+                ])
 
-                    st.markdown("---")
-                    cg, ch = st.columns(2)
-                    forma_pag = cg.selectbox("Forma de pagamento", ["Pix", "Dinheiro", "PR", "Cartão de Crédito"])
-                    motorista = ch.text_input("Motorista responsável (opcional)")
+                # ──────────────────────────────────────────────────────────────
+                # REGISTRAR DESPESA
+                # ──────────────────────────────────────────────────────────────
+                with tab_lancar:
+                    with st.container(border=True):
+                        st.markdown("### Nova despesa")
+                        st.caption(
+                            "Preencha os dados do lançamento. Campos específicos "
+                            "aparecem conforme a categoria selecionada."
+                        )
 
-                    condicao_pag = parcelas_q = None
-                    if forma_pag == "Cartão de Crédito":
-                        ci, cj = st.columns(2)
-                        condicao_pag = ci.radio("Condição", ["À vista", "Parcelado"], horizontal=True)
-                        if condicao_pag == "Parcelado":
-                            parcelas_q = cj.number_input("Nº de parcelas", min_value=2, max_value=48, step=1)
+                        c1, c2, c3 = st.columns([1.05, 1.35, 0.85])
 
-                    arquivo = st.file_uploader("Anexar Comprovante (Imagem/PDF)", type=["png", "jpg", "jpeg", "pdf"])
+                        cat = c1.selectbox(
+                            "Categoria",
+                            CATEGORIAS,
+                            key="custos_categoria"
+                        )
 
-                    if st.button("Lançar Despesa no Sistema", use_container_width=True):
-                        km_val = km_atual or 0.0
-                        session = SessionLocal()
-                        v = session.get(Veiculo, opcoes_v[veiculo_sel])
-                        
-                        if km_val > 0 and km_val < v.km_atual:
-                            st.error(f"KM não pode ser menor que o atual ({int(v.km_atual)} km).", icon=None)
-                            session.close()
+                        veiculo_sel = c2.selectbox(
+                            "Veículo",
+                            list(opcoes_v.keys()),
+                            key="custos_veiculo"
+                        )
+
+                        data_custo = c3.date_input(
+                            "Data",
+                            format="DD/MM/YYYY",
+                            key="custos_data"
+                        )
+
+                        veiculo_id_sel = opcoes_v[veiculo_sel]
+                        veiculo_ctx = df_veiculos.loc[
+                            df_veiculos["id"] == veiculo_id_sel
+                        ].iloc[0]
+
+                        km_cadastrado = float(veiculo_ctx["km_atual"] or 0)
+                        status_veiculo = str(
+                            veiculo_ctx["status"] or "Não informado"
+                        )
+
+                        st.info(
+                            f"**{veiculo_ctx['modelo']} · {veiculo_ctx['placa']}**  |  "
+                            f"Status: **{status_veiculo}**  |  "
+                            f"KM cadastrado: **{km_cadastrado:,.0f} km**",
+                            icon=None
+                        )
+
+                        d1, d2, d3 = st.columns([1, 1, 1])
+
+                        valor = d1.number_input(
+                            "Valor total (R$)",
+                            min_value=0.01,
+                            step=10.0,
+                            value=0.01,
+                            key="custos_valor"
+                        )
+
+                        km_atual = d2.number_input(
+                            "KM no momento",
+                            min_value=0.0,
+                            step=50.0,
+                            value=km_cadastrado,
+                            key=f"custos_km_{veiculo_id_sel}"
+                        )
+
+                        litros = None
+                        if cat == "Combustível":
+                            litros = d3.number_input(
+                                "Litros abastecidos",
+                                min_value=0.1,
+                                step=1.0,
+                                value=0.1,
+                                key="custos_litros"
+                            )
+
+                            if litros > 0:
+                                preco_litro = valor / litros
+                                d3.caption(
+                                    f"Preço calculado: **{fmt_brl(preco_litro)}/L**"
+                                )
+
+                        elif cat in [
+                            "Manutenção Preventiva",
+                            "Manutenção Corretiva"
+                        ]:
+                            d3.metric(
+                                "KM desde cadastro",
+                                f"{max(float(km_atual) - km_cadastrado, 0):,.0f} km"
+                            )
                         else:
-                            comp_path = None
-                            if arquivo:
-                                ext = arquivo.name.rsplit(".", 1)[-1]
-                                comp_path = os.path.join("comprovantes", f"comp_{uuid.uuid4().hex[:8]}.{ext}")
-                                with open(comp_path, "wb") as f: 
-                                    f.write(arquivo.getbuffer())
+                            d3.caption(
+                                "Esta categoria não exige informação complementar."
+                            )
 
-                            if forma_pag == "Cartão de Crédito" and condicao_pag == "Parcelado" and parcelas_q:
-                                vp = valor / parcelas_q
-                                for i in range(parcelas_q):
-                                    dt_p = add_months(data_custo, i)
-                                    desc_p = f"{descricao} (Parcela {i+1}/{parcelas_q})" if descricao else f"Parcela {i+1}/{parcelas_q}"
-                                    session.add(Custo(
-                                        empresa_id=emp_id, veiculo_id=v.id, data_custo=dt_p,
-                                        categoria=cat, descricao=desc_p, valor_total=vp,
-                                        km_momento=km_val if i == 0 else 0, litros=litros if i == 0 else None,
-                                        usuario_lancamento=st.session_state["nome"],
-                                        forma_pagamento=forma_pag, condicao_pagamento=condicao_pag,
-                                        parcelas=parcelas_q, motorista=motorista,
-                                        comprovante=comp_path if i == 0 else None
-                                    ))
-                            else:
-                                session.add(Custo(
-                                    empresa_id=emp_id, veiculo_id=v.id, data_custo=data_custo,
-                                    categoria=cat, descricao=descricao, valor_total=valor,
-                                    km_momento=km_val, litros=litros,
-                                    usuario_lancamento=st.session_state["nome"],
-                                    forma_pagamento=forma_pag, condicao_pagamento=condicao_pag,
-                                    parcelas=parcelas_q, motorista=motorista, comprovante=comp_path
-                                ))
+                        descricao = st.text_input(
+                            "Descrição / observação",
+                            placeholder=(
+                                "Ex.: abastecimento, troca de óleo, documentação, "
+                                "serviço realizado..."
+                            ),
+                            key="custos_descricao"
+                        )
 
-                            if km_val > v.km_atual: 
-                                v.km_atual = km_val
-                                
-                            session.commit()
-                            session.close()
-                            st.success("Lançamento efetuado!")
-                            time.sleep(0.8)
-                            st.rerun()
+                        st.markdown("---")
 
-                if st.session_state["perfil"] == "admin":
-                    with st.expander("Excluir registro financeiro"):
-                        df_ex = carregar_dados_tabela(f"""
-                            SELECT c.id, c.data_custo, v.placa, c.categoria, c.valor_total
-                            FROM custos c
-                            JOIN veiculos v ON c.veiculo_id = v.id
-                            WHERE c.empresa_id = {emp_id}
-                            ORDER BY c.data_custo DESC
-                        """, emp_id)
+                        p1, p2 = st.columns(2)
 
-                        if not df_ex.empty:
-                            opcoes_c = {
-                                f"{pd.to_datetime(r['data_custo']).strftime('%d/%m/%Y')} · {r['placa']} · {r['categoria']} ({fmt_brl(float(r['valor_total'] or 0))})": r["id"]
-                                for _, r in df_ex.iterrows()
-                            }
-                            custo_exc = st.selectbox("Selecione o lançamento", list(opcoes_c.keys()))
+                        forma_pag = p1.selectbox(
+                            "Forma de pagamento",
+                            FORMAS_PAGAMENTO,
+                            key="custos_forma_pagamento"
+                        )
 
-                            if st.button("Excluir definitivamente", use_container_width=True, key="btn_excluir_custo"):
-                                session = SessionLocal()
-                                try:
-                                    custo_id = opcoes_c[custo_exc]
-                                    custo = session.get(Custo, custo_id)
-                                    if custo is None:
-                                        st.warning("O lançamento selecionado não foi encontrado.", icon=None)
+                        motorista = p2.text_input(
+                            "Motorista responsável (opcional)",
+                            key="custos_motorista"
+                        )
+
+                        condicao_pag = None
+                        parcelas_q = None
+
+                        if forma_pag == "Cartão de Crédito":
+                            pc1, pc2 = st.columns(2)
+
+                            condicao_pag = pc1.radio(
+                                "Condição",
+                                ["À vista", "Parcelado"],
+                                horizontal=True,
+                                key="custos_condicao_pagamento"
+                            )
+
+                            if condicao_pag == "Parcelado":
+                                parcelas_q = pc2.number_input(
+                                    "Nº de parcelas",
+                                    min_value=2,
+                                    max_value=48,
+                                    step=1,
+                                    value=2,
+                                    key="custos_parcelas"
+                                )
+
+                        st.markdown("**Comprovante**")
+                        arquivo = st.file_uploader(
+                            "Anexar imagem ou PDF",
+                            type=["png", "jpg", "jpeg", "pdf"],
+                            label_visibility="collapsed",
+                            key="custos_comprovante"
+                        )
+
+                        acao_col1, acao_col2 = st.columns([4, 1.2])
+
+                        with acao_col2:
+                            salvar_custo = st.button(
+                                "Registrar despesa",
+                                icon=":material/add_card:",
+                                use_container_width=True,
+                                key="btn_registrar_custo"
+                            )
+
+                        if salvar_custo:
+                            km_val = float(km_atual or 0.0)
+                            session = SessionLocal()
+
+                            try:
+                                veiculo_db = session.get(
+                                    Veiculo,
+                                    veiculo_id_sel
+                                )
+
+                                if veiculo_db is None:
+                                    st.error(
+                                        "O veículo selecionado não foi encontrado.",
+                                        icon=None
+                                    )
+
+                                elif (
+                                    km_val > 0
+                                    and km_val < float(
+                                        veiculo_db.km_atual or 0
+                                    )
+                                ):
+                                    st.error(
+                                        "O KM informado não pode ser menor que "
+                                        f"o KM atual cadastrado "
+                                        f"({int(veiculo_db.km_atual or 0)} km).",
+                                        icon=None
+                                    )
+
+                                else:
+                                    comp_path = None
+
+                                    if arquivo:
+                                        ext = arquivo.name.rsplit(".", 1)[-1]
+                                        comp_path = os.path.join(
+                                            "comprovantes",
+                                            f"comp_{uuid.uuid4().hex[:8]}.{ext}"
+                                        )
+
+                                        with open(comp_path, "wb") as f:
+                                            f.write(arquivo.getbuffer())
+
+                                    if (
+                                        forma_pag == "Cartão de Crédito"
+                                        and condicao_pag == "Parcelado"
+                                        and parcelas_q
+                                    ):
+                                        valor_parcela = valor / parcelas_q
+
+                                        for i in range(int(parcelas_q)):
+                                            dt_parcela = add_months(
+                                                data_custo,
+                                                i
+                                            )
+
+                                            descricao_parcela = (
+                                                f"{descricao} "
+                                                f"(Parcela {i + 1}/{parcelas_q})"
+                                                if descricao
+                                                else
+                                                f"Parcela {i + 1}/{parcelas_q}"
+                                            )
+
+                                            session.add(Custo(
+                                                empresa_id=emp_id,
+                                                veiculo_id=veiculo_db.id,
+                                                data_custo=dt_parcela,
+                                                categoria=cat,
+                                                descricao=descricao_parcela,
+                                                valor_total=valor_parcela,
+                                                km_momento=(
+                                                    km_val if i == 0 else 0
+                                                ),
+                                                litros=(
+                                                    litros if i == 0 else None
+                                                ),
+                                                usuario_lancamento=(
+                                                    st.session_state["nome"]
+                                                ),
+                                                forma_pagamento=forma_pag,
+                                                condicao_pagamento=condicao_pag,
+                                                parcelas=int(parcelas_q),
+                                                motorista=motorista,
+                                                comprovante=(
+                                                    comp_path
+                                                    if i == 0
+                                                    else None
+                                                )
+                                            ))
+
                                     else:
-                                        session.delete(custo)
-                                        session.commit()
-                                        st.cache_data.clear()
-                                        st.success("Registro financeiro excluído com sucesso.")
-                                        time.sleep(0.5)
-                                        st.rerun()
-                                except Exception:
-                                    session.rollback()
-                                    st.error("Não foi possível excluir o registro financeiro.", icon=None)
-                                finally:
-                                    session.close()
+                                        session.add(Custo(
+                                            empresa_id=emp_id,
+                                            veiculo_id=veiculo_db.id,
+                                            data_custo=data_custo,
+                                            categoria=cat,
+                                            descricao=descricao,
+                                            valor_total=valor,
+                                            km_momento=km_val,
+                                            litros=litros,
+                                            usuario_lancamento=(
+                                                st.session_state["nome"]
+                                            ),
+                                            forma_pagamento=forma_pag,
+                                            condicao_pagamento=condicao_pag,
+                                            parcelas=parcelas_q,
+                                            motorista=motorista,
+                                            comprovante=comp_path
+                                        ))
+
+                                    if km_val > float(
+                                        veiculo_db.km_atual or 0
+                                    ):
+                                        veiculo_db.km_atual = km_val
+
+                                    session.commit()
+                                    st.cache_data.clear()
+                                    st.success(
+                                        "Despesa registrada com sucesso."
+                                    )
+                                    time.sleep(0.5)
+                                    st.rerun()
+
+                            except Exception:
+                                session.rollback()
+                                st.error(
+                                    "Não foi possível registrar a despesa.",
+                                    icon=None
+                                )
+
+                            finally:
+                                session.close()
+
+                # ──────────────────────────────────────────────────────────────
+                # LANÇAMENTOS FINANCEIROS
+                # ──────────────────────────────────────────────────────────────
+                with tab_lancamentos:
+                    df_custos = carregar_dados_tabela(f"""
+                        SELECT
+                            c.id,
+                            c.data_custo,
+                            c.veiculo_id,
+                            v.placa,
+                            v.modelo,
+                            c.categoria,
+                            c.descricao,
+                            c.valor_total,
+                            c.km_momento,
+                            c.litros,
+                            c.forma_pagamento,
+                            c.condicao_pagamento,
+                            c.parcelas,
+                            c.motorista,
+                            c.comprovante,
+                            c.usuario_lancamento
+                        FROM custos c
+                        JOIN veiculos v
+                            ON c.veiculo_id = v.id
+                        WHERE c.empresa_id = {emp_id}
+                        ORDER BY c.data_custo DESC, c.id DESC
+                    """, emp_id)
+
+                    with st.container(border=True):
+                        st.markdown("### Lançamentos financeiros")
+                        st.caption(
+                            "Consulte, filtre, exporte, visualize comprovantes "
+                            "e gerencie os registros financeiros."
+                        )
+
+                        if df_custos.empty:
+                            st.info(
+                                "Nenhum lançamento financeiro registrado.",
+                                icon=None
+                            )
+
                         else:
-                            st.info("Nenhum registro financeiro disponível para exclusão.", icon=None)
+                            df_custos["data_custo"] = pd.to_datetime(
+                                df_custos["data_custo"],
+                                errors="coerce"
+                            )
 
-                # Tabela de custos
-                df_custos = carregar_dados_tabela(f"""
-                    SELECT
-                        c.id,
-                        c.data_custo,
-                        v.placa,
-                        c.categoria,
-                        c.descricao,
-                        c.valor_total,
-                        c.forma_pagamento,
-                        c.condicao_pagamento,
-                        c.parcelas,
-                        c.motorista,
-                        c.comprovante
-                    FROM custos c
-                    JOIN veiculos v ON c.veiculo_id = v.id
-                    WHERE c.empresa_id = {emp_id}
-                    ORDER BY c.data_custo DESC
-                """, emp_id)
+                            df_custos["valor_total"] = pd.to_numeric(
+                                df_custos["valor_total"],
+                                errors="coerce"
+                            ).fillna(0.0)
 
-                if not df_custos.empty:
-                    df_custos = df_custos.rename(columns={
-                        "data_custo": "Data",
-                        "placa": "Placa",
-                        "categoria": "Categoria",
-                        "descricao": "Descrição",
-                        "valor_total": "Valor",
-                        "motorista": "Motorista",
-                    })
+                            df_custos["km_momento"] = pd.to_numeric(
+                                df_custos["km_momento"],
+                                errors="coerce"
+                            ).fillna(0.0)
 
-                    df_custos["Data"] = pd.to_datetime(
-                        df_custos["Data"], errors="coerce"
-                    ).dt.strftime("%d/%m/%Y")
-                    df_custos["Pagamento"] = df_custos.apply(
-                        lambda r: f"{r['forma_pagamento']} · {int(r['parcelas'])}x" 
-                        if r["forma_pagamento"] == "Cartão de Crédito" and r["condicao_pagamento"] == "Parcelado" 
-                        else r["forma_pagamento"], axis=1
-                    )
-                    df_custos["Anexo"] = df_custos["comprovante"].apply(lambda x: "Sim" if x else "Não")
+                            df_custos["litros"] = pd.to_numeric(
+                                df_custos["litros"],
+                                errors="coerce"
+                            )
 
-                    h1, h2 = st.columns([4, 1])
-                    with h2:
-                        csv_c = convert_df_to_csv(df_custos[["Data", "Placa", "Categoria", "Descrição", "Valor", "Pagamento", "Motorista"]])
-                        st.download_button("Exportar Base", csv_c, "custos_detalhados.csv", "text/csv", use_container_width=True)
+                            filtros1, filtros2, filtros3, filtros4 = st.columns(
+                                [1, 1.25, 1.15, 1]
+                            )
 
-                    st.dataframe(df_custos[["Data", "Placa", "Categoria", "Descrição", "Valor", "Pagamento", "Motorista", "Anexo"]], use_container_width=True, hide_index=True)
+                            periodo_sel = filtros1.selectbox(
+                                "Período",
+                                [
+                                    "Este mês",
+                                    "Últimos 30 dias",
+                                    "Este ano",
+                                    "Todos"
+                                ],
+                                key="custos_filtro_periodo"
+                            )
 
-                    df_anexos = df_custos[df_custos["comprovante"].notna()]
-                    if not df_anexos.empty:
-                        with st.expander("Consultar Comprovantes Anexados"):
-                            opcoes_anx = {f"{r['Data']} · {r['Placa']} ({fmt_brl(r['Valor'])})": r["comprovante"] for _, r in df_anexos.iterrows()}
-                            anx_sel = st.selectbox("Selecione", list(opcoes_anx.keys()))
-                            caminho = opcoes_anx[anx_sel]
-                            if os.path.exists(caminho):
-                                if caminho.endswith(".pdf"):
-                                    with open(caminho, "rb") as f: 
-                                        st.download_button("Baixar Documento PDF", f, caminho.split("/")[-1], "application/pdf")
-                                else: 
-                                    st.image(caminho, use_container_width=True)
+                            veiculos_filtro = (
+                                ["Todos"]
+                                + sorted(
+                                    df_custos["placa"]
+                                    .dropna()
+                                    .astype(str)
+                                    .unique()
+                                    .tolist()
+                                )
+                            )
+
+                            veiculo_filtro = filtros2.selectbox(
+                                "Veículo",
+                                veiculos_filtro,
+                                key="custos_filtro_veiculo"
+                            )
+
+                            categorias_filtro = (
+                                ["Todas"]
+                                + sorted(
+                                    df_custos["categoria"]
+                                    .dropna()
+                                    .astype(str)
+                                    .unique()
+                                    .tolist()
+                                )
+                            )
+
+                            categoria_filtro = filtros3.selectbox(
+                                "Categoria",
+                                categorias_filtro,
+                                key="custos_filtro_categoria"
+                            )
+
+                            pagamentos_filtro = (
+                                ["Todos"]
+                                + sorted(
+                                    df_custos["forma_pagamento"]
+                                    .dropna()
+                                    .astype(str)
+                                    .unique()
+                                    .tolist()
+                                )
+                            )
+
+                            pagamento_filtro = filtros4.selectbox(
+                                "Pagamento",
+                                pagamentos_filtro,
+                                key="custos_filtro_pagamento"
+                            )
+
+                            df_filtrado = df_custos.copy()
+                            hoje_custos = date.today()
+
+                            if periodo_sel == "Este mês":
+                                df_filtrado = df_filtrado[
+                                    (
+                                        df_filtrado["data_custo"].dt.month
+                                        == hoje_custos.month
+                                    )
+                                    & (
+                                        df_filtrado["data_custo"].dt.year
+                                        == hoje_custos.year
+                                    )
+                                ]
+
+                            elif periodo_sel == "Últimos 30 dias":
+                                limite_data = pd.Timestamp(
+                                    hoje_custos - timedelta(days=30)
+                                )
+
+                                df_filtrado = df_filtrado[
+                                    df_filtrado["data_custo"]
+                                    >= limite_data
+                                ]
+
+                            elif periodo_sel == "Este ano":
+                                df_filtrado = df_filtrado[
+                                    df_filtrado["data_custo"].dt.year
+                                    == hoje_custos.year
+                                ]
+
+                            if veiculo_filtro != "Todos":
+                                df_filtrado = df_filtrado[
+                                    df_filtrado["placa"]
+                                    == veiculo_filtro
+                                ]
+
+                            if categoria_filtro != "Todas":
+                                df_filtrado = df_filtrado[
+                                    df_filtrado["categoria"]
+                                    == categoria_filtro
+                                ]
+
+                            if pagamento_filtro != "Todos":
+                                df_filtrado = df_filtrado[
+                                    df_filtrado["forma_pagamento"]
+                                    == pagamento_filtro
+                                ]
+
+                            total_filtrado = float(
+                                df_filtrado["valor_total"].sum()
+                            )
+
+                            qtd_filtrada = len(df_filtrado)
+
+                            ticket_medio = (
+                                total_filtrado / qtd_filtrada
+                                if qtd_filtrada
+                                else 0.0
+                            )
+
+                            m1, m2, m3 = st.columns(3)
+
+                            m1.metric(
+                                "Lançamentos",
+                                qtd_filtrada
+                            )
+
+                            m2.metric(
+                                "Total filtrado",
+                                fmt_brl(total_filtrado)
+                            )
+
+                            m3.metric(
+                                "Ticket médio",
+                                fmt_brl(ticket_medio)
+                            )
+
+                            st.markdown("<br>", unsafe_allow_html=True)
+
+                            if df_filtrado.empty:
+                                st.info(
+                                    "Nenhum lançamento encontrado com "
+                                    "os filtros selecionados.",
+                                    icon=None
+                                )
+
+                            else:
+                                df_exibicao = df_filtrado.copy()
+
+                                df_exibicao["Data"] = (
+                                    df_exibicao["data_custo"]
+                                    .dt.strftime("%d/%m/%Y")
+                                )
+
+                                df_exibicao["Veículo"] = (
+                                    df_exibicao["modelo"]
+                                    .fillna("")
+                                    .astype(str)
+                                    + " · "
+                                    + df_exibicao["placa"]
+                                    .fillna("")
+                                    .astype(str)
+                                )
+
+                                df_exibicao["Pagamento"] = df_exibicao.apply(
+                                    lambda r: (
+                                        f"{r['forma_pagamento']} · "
+                                        f"{int(r['parcelas'])}x"
+                                        if (
+                                            r["forma_pagamento"]
+                                            == "Cartão de Crédito"
+                                            and r["condicao_pagamento"]
+                                            == "Parcelado"
+                                            and pd.notna(r["parcelas"])
+                                        )
+                                        else (
+                                            r["forma_pagamento"]
+                                            or "—"
+                                        )
+                                    ),
+                                    axis=1
+                                )
+
+                                df_exibicao["Valor"] = (
+                                    df_exibicao["valor_total"]
+                                    .apply(fmt_brl)
+                                )
+
+                                df_exibicao["KM"] = (
+                                    df_exibicao["km_momento"]
+                                    .apply(
+                                        lambda x: (
+                                            f"{x:,.0f}"
+                                            if float(x or 0) > 0
+                                            else "—"
+                                        )
+                                    )
+                                )
+
+                                df_exibicao["Preço/L"] = df_exibicao.apply(
+                                    lambda r: (
+                                        fmt_brl(
+                                            float(r["valor_total"])
+                                            / float(r["litros"])
+                                        )
+                                        if (
+                                            pd.notna(r["litros"])
+                                            and float(r["litros"]) > 0
+                                        )
+                                        else "—"
+                                    ),
+                                    axis=1
+                                )
+
+                                df_exibicao["Comprovante"] = (
+                                    df_exibicao["comprovante"]
+                                    .apply(
+                                        lambda x: "Anexado" if x else "—"
+                                    )
+                                )
+
+                                tabela_custos = df_exibicao[[
+                                    "Data",
+                                    "Veículo",
+                                    "categoria",
+                                    "descricao",
+                                    "Valor",
+                                    "Pagamento",
+                                    "KM",
+                                    "Preço/L",
+                                    "motorista",
+                                    "Comprovante"
+                                ]].rename(columns={
+                                    "categoria": "Categoria",
+                                    "descricao": "Descrição",
+                                    "motorista": "Motorista"
+                                })
+
+                                export_col1, export_col2 = st.columns(
+                                    [4, 1]
+                                )
+
+                                with export_col2:
+                                    csv_custos = convert_df_to_csv(
+                                        tabela_custos
+                                    )
+
+                                    st.download_button(
+                                        "Exportar base",
+                                        csv_custos,
+                                        "custos_filtrados.csv",
+                                        "text/csv",
+                                        use_container_width=True,
+                                        key="custos_exportar"
+                                    )
+
+                                st.dataframe(
+                                    tabela_custos,
+                                    use_container_width=True,
+                                    hide_index=True
+                                )
+
+                                st.markdown("---")
+
+                                # ── Comprovantes ─────────────────────────────
+                                df_anexos = df_filtrado[
+                                    df_filtrado["comprovante"].notna()
+                                    & (
+                                        df_filtrado["comprovante"]
+                                        .astype(str)
+                                        .str.strip()
+                                        != ""
+                                    )
+                                ]
+
+                                if not df_anexos.empty:
+                                    with st.expander(
+                                        "Consultar comprovantes"
+                                    ):
+                                        opcoes_anx = {
+                                            (
+                                                f"{pd.to_datetime(r['data_custo']).strftime('%d/%m/%Y')}"
+                                                f" · {r['placa']}"
+                                                f" · {r['categoria']}"
+                                                f" · {fmt_brl(float(r['valor_total'] or 0))}"
+                                            ): r["comprovante"]
+                                            for _, r in df_anexos.iterrows()
+                                        }
+
+                                        anx_sel = st.selectbox(
+                                            "Lançamento",
+                                            list(opcoes_anx.keys()),
+                                            key="custos_anexo_selecao"
+                                        )
+
+                                        caminho = opcoes_anx[anx_sel]
+
+                                        if caminho and os.path.exists(
+                                            caminho
+                                        ):
+                                            if caminho.lower().endswith(
+                                                ".pdf"
+                                            ):
+                                                with open(
+                                                    caminho,
+                                                    "rb"
+                                                ) as f:
+                                                    st.download_button(
+                                                        "Baixar PDF",
+                                                        f,
+                                                        os.path.basename(
+                                                            caminho
+                                                        ),
+                                                        "application/pdf",
+                                                        key=(
+                                                            "custos_baixar_pdf"
+                                                        )
+                                                    )
+                                            else:
+                                                st.image(
+                                                    caminho,
+                                                    use_container_width=True
+                                                )
+                                        else:
+                                            st.warning(
+                                                "O arquivo do comprovante "
+                                                "não foi encontrado.",
+                                                icon=None
+                                            )
+
+                                # ── Exclusão integrada ─────────────────────
+                                if (
+                                    st.session_state["perfil"]
+                                    == "admin"
+                                ):
+                                    with st.expander(
+                                        "Gerenciar lançamento"
+                                    ):
+                                        st.caption(
+                                            "A exclusão é permanente e deve "
+                                            "ser usada somente para corrigir "
+                                            "lançamentos incorretos."
+                                        )
+
+                                        opcoes_exclusao = {
+                                            (
+                                                f"{pd.to_datetime(r['data_custo']).strftime('%d/%m/%Y')}"
+                                                f" · {r['placa']}"
+                                                f" · {r['categoria']}"
+                                                f" · {fmt_brl(float(r['valor_total'] or 0))}"
+                                            ): int(r["id"])
+                                            for _, r in df_filtrado.iterrows()
+                                        }
+
+                                        custo_excluir_label = st.selectbox(
+                                            "Selecione o lançamento",
+                                            list(
+                                                opcoes_exclusao.keys()
+                                            ),
+                                            key="custos_excluir_selecao"
+                                        )
+
+                                        confirmar_exclusao = st.checkbox(
+                                            "Confirmo a exclusão permanente "
+                                            "deste lançamento.",
+                                            key="custos_confirmar_exclusao"
+                                        )
+
+                                        ex1, ex2 = st.columns([4, 1])
+
+                                        with ex2:
+                                            excluir_custo = st.button(
+                                                "Excluir lançamento",
+                                                icon=":material/delete:",
+                                                use_container_width=True,
+                                                disabled=(
+                                                    not confirmar_exclusao
+                                                ),
+                                                key=(
+                                                    "btn_excluir_custo"
+                                                )
+                                            )
+
+                                        if excluir_custo:
+                                            session = SessionLocal()
+
+                                            try:
+                                                custo_id = (
+                                                    opcoes_exclusao[
+                                                        custo_excluir_label
+                                                    ]
+                                                )
+
+                                                custo_db = session.get(
+                                                    Custo,
+                                                    custo_id
+                                                )
+
+                                                if custo_db is None:
+                                                    st.warning(
+                                                        "O lançamento "
+                                                        "selecionado não foi "
+                                                        "encontrado.",
+                                                        icon=None
+                                                    )
+
+                                                else:
+                                                    session.delete(
+                                                        custo_db
+                                                    )
+                                                    session.commit()
+                                                    st.cache_data.clear()
+
+                                                    st.success(
+                                                        "Registro financeiro "
+                                                        "excluído com sucesso."
+                                                    )
+
+                                                    time.sleep(0.5)
+                                                    st.rerun()
+
+                                            except Exception:
+                                                session.rollback()
+                                                st.error(
+                                                    "Não foi possível excluir "
+                                                    "o registro financeiro.",
+                                                    icon=None
+                                                )
+
+                                            finally:
+                                                session.close()
+
 
         # ══════════════════════════════════════════════════════════════════════════
         # GESTÃO DE COBRANÇAS
