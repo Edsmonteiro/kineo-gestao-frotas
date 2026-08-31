@@ -1,0 +1,17 @@
+# Ambiente Virtual
+venv/
+.venv/
+env/
+
+# Banco de dados local SQLite
+*.db
+frota.db
+
+# Uploads locais de teste
+comprovantes/
+logos/
+
+# Cache do Python e Streamlit
+__pycache__/
+*.pyc
+.streamlit/secrets.toml
