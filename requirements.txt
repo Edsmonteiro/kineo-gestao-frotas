@@ -8,3 +8,5 @@ openpyxl
 # Dependência nova da V8 de segurança.
 # Adicione esta linha ao requirements.txt do Kineo antes do deploy:
 argon2-cffi>=25.1.0,<26
+# Adicionar ao requirements.txt existente para homologação/produção V10
+boto3>=1.40,<2.0

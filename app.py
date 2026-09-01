@@ -6,9 +6,9 @@ from database import (
     engine, SessionLocal, Veiculo, Contrato, SubstituicaoContrato, Custo, Usuario, Empresa, Motorista,
     CobrancaRecorrente, CobrancaMensal, PlanoManutencao, ItemPlanoManutencao, ManutencaoRealizada,
     Auditoria, hash_password, verify_password, password_needs_rehash, gerar_senha_temporaria,
-    ARGON2_DISPONIVEL, APP_ENV
+    ARGON2_DISPONIVEL, APP_ENV, IS_MANAGED_ENV
 )
-from datetime import date, timedelta, datetime
+from datetime import date, timedelta, datetime, timezone
 import calendar
 import os
 import uuid
@@ -20,8 +20,16 @@ import logging
 from io import BytesIO
 from PIL import Image, UnidentifiedImageError
 from sqlalchemy import text as sql_text
+from sqlalchemy.exc import IntegrityError
 from zoneinfo import ZoneInfo
-from decimal import Decimal, ROUND_HALF_UP
+from decimal import Decimal, ROUND_HALF_UP, ROUND_DOWN
+
+try:
+    import boto3
+    BOTO3_DISPONIVEL = True
+except Exception:
+    boto3 = None
+    BOTO3_DISPONIVEL = False
 
 logger = logging.getLogger("kineo")
 
@@ -33,6 +41,21 @@ try:
     ZoneInfo(APP_TIMEZONE)
 except Exception:
     APP_TIMEZONE = "America/Fortaleza"
+
+
+def agora_utc():
+    """UTC ingênuo para persistência uniforme em SQLite/PostgreSQL."""
+    return datetime.now(timezone.utc).replace(tzinfo=None)
+
+
+def agora_local():
+    """Data/hora corrente no fuso operacional do Kineo."""
+    return datetime.now(ZoneInfo(APP_TIMEZONE))
+
+
+def hoje_local():
+    """Data corrente no fuso operacional, usada em regras de negócio."""
+    return agora_local().date()
 
 
 def formatar_serie_datetime_local(serie, formato="%d/%m/%Y %H:%M"):
@@ -663,6 +686,117 @@ def _config_value(nome, default=None):
     return os.getenv(nome, default)
 
 
+# ─── STORAGE PRIVADO ──────────────────────────────────────────────────────────
+# DEV usa filesystem local. Homologação/produção exigem S3 para que comprovantes,
+# logos e avatares sobrevivam a reinícios/escala horizontal do servidor.
+STORAGE_BACKEND = str(
+    _config_value("KINEO_STORAGE_BACKEND", "s3" if IS_MANAGED_ENV else "local")
+).strip().lower()
+S3_BUCKET = str(_config_value("KINEO_S3_BUCKET", "") or "").strip()
+S3_PREFIX = str(_config_value("KINEO_S3_PREFIX", "kineo") or "kineo").strip("/")
+
+if STORAGE_BACKEND not in {"local", "s3"}:
+    raise RuntimeError("KINEO_STORAGE_BACKEND deve ser 'local' ou 's3'.")
+if IS_MANAGED_ENV and STORAGE_BACKEND != "s3":
+    raise RuntimeError(
+        "Homologação/produção exigem KINEO_STORAGE_BACKEND=s3 para armazenamento persistente de arquivos."
+    )
+if STORAGE_BACKEND == "s3" and (not BOTO3_DISPONIVEL or not S3_BUCKET):
+    raise RuntimeError(
+        "Storage S3 selecionado, mas boto3/KINEO_S3_BUCKET não estão configurados corretamente."
+    )
+
+_S3_CLIENT = None
+
+def _obter_s3_client():
+    global _S3_CLIENT
+    if _S3_CLIENT is None:
+        _S3_CLIENT = boto3.client("s3")
+    return _S3_CLIENT
+
+def referencia_storage(chave):
+    chave = str(chave or "").replace("\\", "/").lstrip("/")
+    if STORAGE_BACKEND == "s3":
+        key = f"{S3_PREFIX}/{chave}" if S3_PREFIX else chave
+        return f"s3://{S3_BUCKET}/{key}"
+    return chave
+
+def _parse_s3_ref(ref):
+    texto = str(ref or "")
+    if not texto.startswith("s3://"):
+        return None, None
+    resto = texto[5:]
+    bucket, _, key = resto.partition("/")
+    return bucket, key
+
+def salvar_bytes_privado(chave, dados, content_type="application/octet-stream"):
+    ref = referencia_storage(chave)
+    if ref.startswith("s3://"):
+        bucket, key = _parse_s3_ref(ref)
+        _obter_s3_client().put_object(
+            Bucket=bucket, Key=key, Body=dados, ContentType=content_type,
+            ServerSideEncryption="AES256",
+        )
+        return ref
+    pasta = os.path.dirname(ref)
+    if pasta:
+        os.makedirs(pasta, exist_ok=True)
+    with open(ref, "wb") as f:
+        f.write(dados)
+    return ref
+
+def ler_bytes_privado(ref):
+    if not ref:
+        return None
+    if str(ref).startswith("s3://"):
+        bucket, key = _parse_s3_ref(ref)
+        try:
+            return _obter_s3_client().get_object(Bucket=bucket, Key=key)["Body"].read()
+        except Exception:
+            logger.exception("Falha ao ler arquivo privado do S3")
+            return None
+    try:
+        with open(ref, "rb") as f:
+            return f.read()
+    except OSError:
+        return None
+
+def storage_existe(ref):
+    if not ref:
+        return False
+    if str(ref).startswith("s3://"):
+        bucket, key = _parse_s3_ref(ref)
+        try:
+            _obter_s3_client().head_object(Bucket=bucket, Key=key)
+            return True
+        except Exception:
+            return False
+    return os.path.exists(ref)
+
+def excluir_storage(ref):
+    if not ref:
+        return
+    if str(ref).startswith("s3://"):
+        bucket, key = _parse_s3_ref(ref)
+        try:
+            _obter_s3_client().delete_object(Bucket=bucket, Key=key)
+        except Exception:
+            logger.exception("Falha ao excluir arquivo privado do S3")
+    else:
+        try:
+            if os.path.exists(ref):
+                os.remove(ref)
+        except OSError:
+            logger.exception("Falha ao excluir arquivo privado local")
+
+def salvar_upload_privado(uploaded_file, chave, content_type=None):
+    ext = str(getattr(uploaded_file, "name", "")).rsplit(".", 1)[-1].lower()
+    mime = content_type or {
+        "pdf": "application/pdf", "png": "image/png", "jpg": "image/jpeg", "jpeg": "image/jpeg"
+    }.get(ext, "application/octet-stream")
+    return salvar_bytes_privado(chave, uploaded_file.getvalue(), mime)
+
+
 try:
     SESSION_TIMEOUT_MINUTES = max(5, int(_config_value("KINEO_SESSION_TIMEOUT_MINUTES", 30)))
 except Exception:
@@ -728,7 +862,7 @@ def registrar_auditoria(session, empresa_id, usuario_id, acao, entidade=None, en
             entidade=str(entidade)[:120] if entidade else None,
             entidade_id=int(entidade_id) if entidade_id is not None else None,
             detalhes=str(detalhes)[:1000] if detalhes else None,
-            criado_em=datetime.utcnow(),
+            criado_em=agora_utc(),
         ))
     except Exception:
         # A auditoria nunca deve quebrar a operação principal; a transação ainda
@@ -781,7 +915,7 @@ def registrar_ciencia_privacidade():
         )
         if user is not None:
             user.privacidade_versao_aceita = PRIVACY_VERSION
-            user.privacidade_vista_em = datetime.utcnow()
+            user.privacidade_vista_em = agora_utc()
             registrar_auditoria(
                 session,
                 user.empresa_id,
@@ -825,10 +959,10 @@ def validar_upload_basico(uploaded_file, tipos_permitidos, max_mb=10):
 
 
 
-def salvar_imagem_segura(uploaded_file, caminho_png, max_mb=5):
+def salvar_imagem_segura(uploaded_file, chave_png, max_mb=5):
     ok, erro = validar_upload_basico(uploaded_file, {"png", "jpg", "jpeg"}, max_mb=max_mb)
     if not ok:
-        return False, erro
+        return False, erro, None
     try:
         dados = uploaded_file.getvalue()
         with Image.open(BytesIO(dados)) as img:
@@ -836,10 +970,15 @@ def salvar_imagem_segura(uploaded_file, caminho_png, max_mb=5):
         with Image.open(BytesIO(dados)) as img:
             img = img.convert("RGBA" if img.mode in {"RGBA", "LA"} else "RGB")
             img.thumbnail((2000, 2000))
-            img.save(caminho_png, format="PNG", optimize=True)
-        return True, None
+            buffer = BytesIO()
+            img.save(buffer, format="PNG", optimize=True)
+            ref = salvar_bytes_privado(chave_png, buffer.getvalue(), "image/png")
+        return True, None, ref
     except (UnidentifiedImageError, OSError, ValueError):
-        return False, "A imagem enviada é inválida ou está corrompida."
+        return False, "A imagem enviada é inválida ou está corrompida.", None
+    except Exception:
+        logger.exception("Falha ao persistir imagem no storage privado")
+        return False, "Não foi possível armazenar a imagem.", None
 
 
 
@@ -891,6 +1030,25 @@ def parse_valor_cobranca(valor):
         return 0.0
 
 
+def decimal_monetario(valor):
+    """Normaliza um valor monetário para Decimal(2), sem aritmética financeira em float."""
+    if isinstance(valor, Decimal):
+        return valor.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+    return Decimal(str(parse_valor_cobranca(valor))).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+
+
+def dividir_valor_parcelas(valor, quantidade):
+    """Divide o total sem perder centavos; o resíduo fica na última parcela."""
+    total = decimal_monetario(valor)
+    qtd = int(quantidade or 0)
+    if qtd <= 0:
+        raise ValueError("Quantidade de parcelas inválida.")
+    base = (total / Decimal(qtd)).quantize(Decimal("0.01"), rounding=ROUND_DOWN)
+    parcelas = [base for _ in range(qtd)]
+    parcelas[-1] = (total - base * Decimal(qtd - 1)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+    return parcelas
+
+
 def competencia_para_data(mes_ano):
     """Retorna o primeiro dia da competência MM/AAAA."""
     mes, ano = map(int, str(mes_ano).split("/"))
@@ -905,7 +1063,7 @@ def intervalo_competencia(mes_ano):
 
 
 def opcoes_competencias(meses_antes=12, meses_depois=18):
-    base = date.today().replace(day=1)
+    base = hoje_local().replace(day=1)
     return [
         add_months(base, i).strftime("%m/%Y")
         for i in range(-meses_antes, meses_depois + 1)
@@ -927,7 +1085,7 @@ def salvar_valor_variavel_competencia(session, empresa_id, contrato, mes_ano, va
     valor_num = parse_valor_cobranca(valor)
     if valor_num <= 0:
         raise ValueError("Informe um valor de competência maior que zero.")
-    valor_decimal = Decimal(str(valor_num)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+    valor_decimal = decimal_monetario(valor)
 
     recorrente = session.query(CobrancaRecorrente).filter(
         CobrancaRecorrente.empresa_id == int(empresa_id),
@@ -945,6 +1103,11 @@ def salvar_valor_variavel_competencia(session, empresa_id, contrato, mes_ano, va
     mes, ano = map(int, str(mes_ano).split("/"))
 
     if mensal is not None:
+        if int(getattr(mensal, "liquidacao_congelada", 0) or 0) == 1 and mensal.valor_liquidado is not None:
+            raise ValueError(
+                "A competência já foi recebida e está congelada no histórico financeiro. "
+                "Não é possível alterar o valor previsto desta liquidação."
+            )
         mensal.valor_previsto = valor_decimal
         mensal.cliente = contrato.cliente
         mensal.multa = float(contrato.multa or 0)
@@ -1085,6 +1248,24 @@ def contrato_pode_ser_excluido(session, empresa_id, contrato_id):
     return not any(quantidades.values()), quantidades
 
 
+def veiculo_pode_ser_excluido(session, empresa_id, veiculo_id):
+    """Exclusão física somente para cadastro sem qualquer histórico; caso contrário, arquiva."""
+    empresa_id = int(empresa_id)
+    veiculo_id = int(veiculo_id)
+    quantidades = {
+        "custos": session.query(Custo).filter(Custo.empresa_id == empresa_id, Custo.veiculo_id == veiculo_id).count(),
+        "contratos": session.query(Contrato).filter(Contrato.empresa_id == empresa_id, Contrato.veiculo_id == veiculo_id).count(),
+        "contratos_ativos": session.query(Contrato).filter(Contrato.empresa_id == empresa_id, Contrato.veiculo_id == veiculo_id, Contrato.ativo == 1).count(),
+        "manutencoes": session.query(ManutencaoRealizada).filter(ManutencaoRealizada.empresa_id == empresa_id, ManutencaoRealizada.veiculo_id == veiculo_id).count(),
+        "substituicoes": session.query(SubstituicaoContrato).filter(
+            SubstituicaoContrato.empresa_id == empresa_id,
+            (SubstituicaoContrato.veiculo_principal_id == veiculo_id) | (SubstituicaoContrato.veiculo_substituto_id == veiculo_id),
+        ).count(),
+    }
+    tem_historico = any(v for k, v in quantidades.items() if k != "contratos_ativos")
+    return not tem_historico, quantidades
+
+
 def normalizar_status_cobranca(status):
     status = str(status or "").strip()
     if status == "Pendente":
@@ -1163,7 +1344,7 @@ def dias_atraso_cobranca(vencimento, status, data_recebimento=None):
         # Status recebido sem data não permite determinar o atraso com segurança.
         return 0
 
-    return max((date.today() - venc).days, 0)
+    return max((hoje_local() - venc).days, 0)
 
 
 def calcular_encargos_cobranca(
@@ -1183,9 +1364,7 @@ def calcular_encargos_cobranca(
     - cobrança ainda aberta: atraso é calculado até hoje.
     """
     try:
-        principal = Decimal(str(valor_previsto or 0)).quantize(
-            Decimal("0.01"), rounding=ROUND_HALF_UP
-        )
+        principal = decimal_monetario(valor_previsto)
     except Exception:
         principal = Decimal("0.00")
 
@@ -1227,6 +1406,53 @@ def calcular_encargos_cobranca(
             Decimal("0.01"), rounding=ROUND_HALF_UP
         ),
     }
+
+
+def encargos_cobranca_exibicao(registro):
+    """Usa a liquidação congelada quando existente; caso contrário calcula a posição atual."""
+    try:
+        congelada = int(registro.get("liquidacao_congelada") or 0) == 1
+    except Exception:
+        congelada = False
+    valor_liquidado = registro.get("valor_liquidado")
+    if congelada and pd.notna(valor_liquidado):
+        return {
+            "dias_atraso": int(registro.get("dias_atraso_liquidacao") or 0),
+            "valor_multa": decimal_monetario(registro.get("multa_aplicada") or 0),
+            "valor_juros": decimal_monetario(registro.get("juros_aplicados") or 0),
+            "valor_atualizado": decimal_monetario(valor_liquidado),
+        }
+    return calcular_encargos_cobranca(
+        registro.get("valor_previsto"), registro.get("vencimento"), registro.get("status"),
+        registro.get("data_recebimento"), registro.get("multa"), registro.get("juros"),
+    )
+
+
+def congelar_liquidacao(cobranca, valor_principal, data_recebimento, multa_percentual, juros_percentual):
+    """Persiste o retrato financeiro da liquidação; o passado deixa de ser recalculável."""
+    if cobranca is None:
+        raise ValueError("Cobrança não encontrada.")
+    if int(getattr(cobranca, "liquidacao_congelada", 0) or 0) == 1 and cobranca.valor_liquidado is not None:
+        return
+    receb = coerce_date(data_recebimento)
+    if receb is None:
+        raise ValueError("Informe a data de recebimento para concluir a liquidação.")
+    principal = decimal_monetario(valor_principal)
+    encargos = calcular_encargos_cobranca(
+        principal, cobranca.vencimento, "Recebida", receb, multa_percentual, juros_percentual
+    )
+    cobranca.valor_previsto = principal
+    cobranca.data_recebimento = receb
+    cobranca.status = "Recebida"
+    cobranca.multa = float(multa_percentual or 0)
+    cobranca.juros = float(juros_percentual or 0)
+    cobranca.valor_principal_liquidado = principal
+    cobranca.multa_aplicada = encargos["valor_multa"]
+    cobranca.juros_aplicados = encargos["valor_juros"]
+    cobranca.dias_atraso_liquidacao = int(encargos["dias_atraso"])
+    cobranca.valor_liquidado = encargos["valor_atualizado"]
+    cobranca.liquidacao_congelada = 1
+    cobranca.liquidado_em = agora_utc()
 
 
 def obter_contrato_por_veiculo_data(session, empresa_id, veiculo_id, data_ref):
@@ -1371,7 +1597,7 @@ def diagnostico_manutencao(empresa_id):
         SELECT id, placa, fabricante, modelo, ano_modelo, versao, motorizacao,
                km_atual, status, plano_manutencao_id
         FROM veiculos
-        WHERE empresa_id = :empresa_id AND plano_manutencao_id IS NOT NULL
+        WHERE empresa_id = :empresa_id AND COALESCE(ativo, 1)=1 AND plano_manutencao_id IS NOT NULL
         ORDER BY modelo, placa
     """, empresa_id)
 
@@ -1396,7 +1622,7 @@ def diagnostico_manutencao(empresa_id):
     """, empresa_id)
 
     registros = []
-    hoje = date.today()
+    hoje = hoje_local()
 
     for _, veiculo in df_v.iterrows():
         itens = df_itens[df_itens["plano_id"] == veiculo["plano_manutencao_id"]]
@@ -1489,7 +1715,8 @@ def processar_planilha_planos(df_import, empresa_id, usuario, veiculo_id_forcado
             if veiculo_id_forcado:
                 veiculo = session.query(Veiculo).filter(
                     Veiculo.id == veiculo_id_forcado,
-                    Veiculo.empresa_id == empresa_id
+                    Veiculo.empresa_id == empresa_id,
+                    Veiculo.ativo == 1
                 ).first()
                 if veiculo and veiculo.placa.upper() != placa:
                     ignorados.append(f"Linha {idx + 2}: placa diferente do veículo selecionado")
@@ -1497,7 +1724,8 @@ def processar_planilha_planos(df_import, empresa_id, usuario, veiculo_id_forcado
             else:
                 veiculo = session.query(Veiculo).filter(
                     Veiculo.empresa_id == empresa_id,
-                    Veiculo.placa == placa
+                    Veiculo.placa == placa,
+                    Veiculo.ativo == 1
                 ).first()
 
             if not veiculo:
@@ -1669,7 +1897,7 @@ def iniciar_substituicao_contrato(session, empresa_id, contrato, veiculo_princip
         contrato_id=contrato.id,
         veiculo_principal_id=veiculo_principal.id,
         veiculo_substituto_id=veiculo_substituto.id,
-        data_inicio=date.today(),
+        data_inicio=hoje_local(),
         data_fim=None,
         ativo=1,
         usuario_lancamento=usuario
@@ -1684,7 +1912,7 @@ def finalizar_substituicao_contrato(session, substituicao, status_principal="Alu
     substituto = tenant_get(session, Veiculo, substituicao.veiculo_substituto_id, substituicao.empresa_id)
 
     substituicao.ativo = 0
-    substituicao.data_fim = date.today()
+    substituicao.data_fim = hoje_local()
 
     if principal is not None:
         principal.status = status_principal
@@ -2490,15 +2718,11 @@ def render_gestao_usuarios(emp_id):
                             u.id,
                             usuario_snapshot,
                         )
-                        avatar_excluido = os.path.join("logos", f"avatar_{u.id}.png")
+                        avatar_excluido = referencia_storage(f"logos/avatars/avatar_{u.id}.png")
                         session.delete(u)
                         session.commit()
 
-                        try:
-                            if os.path.exists(avatar_excluido):
-                                os.remove(avatar_excluido)
-                        except OSError:
-                            pass
+                        excluir_storage(avatar_excluido)
 
                         st.cache_data.clear()
                         st.success("Usuário excluído permanentemente.")
@@ -2560,7 +2784,7 @@ if not st.session_state["autenticado"]:
 
             if submitted:
                 login_digitado = str(usuario_input or "").strip()
-                agora = datetime.utcnow()
+                agora = agora_utc()
                 session = SessionLocal()
                 try:
                     user = session.query(Usuario).filter(Usuario.login == login_digitado).first()
@@ -2709,7 +2933,7 @@ elif st.session_state["forcar_troca_senha"]:
                             else:
                                 user.senha = hash_password(nova)
                                 user.must_change_password = 0
-                                user.senha_alterada_em = datetime.utcnow()
+                                user.senha_alterada_em = agora_utc()
                                 user.tentativas_login = 0
                                 user.bloqueado_ate = None
                                 registrar_auditoria(
@@ -2741,7 +2965,7 @@ else:
     tela_ativa = st.session_state.get("ultimo_menu", "Painel Gerencial")
 
     # Caminho do Avatar Pessoal do Usuário Logado
-    avatar_path = os.path.join("logos", f"avatar_{st.session_state['usuario_id']}.png")
+    avatar_path = referencia_storage(f"logos/avatars/avatar_{st.session_state['usuario_id']}.png")
 
     # ── Sidebar ──────────────────────────────────────────────────────────────
     with st.sidebar:
@@ -2750,9 +2974,9 @@ else:
         session_logo.close()
 
         # Renderização Logo Dinâmica
-        if empresa_atual and empresa_atual.logo_path and os.path.exists(empresa_atual.logo_path):
-            with open(empresa_atual.logo_path, "rb") as image_file:
-                encoded_string = base64.b64encode(image_file.read()).decode()
+        logo_bytes = ler_bytes_privado(empresa_atual.logo_path) if empresa_atual and empresa_atual.logo_path else None
+        if empresa_atual and empresa_atual.logo_path and logo_bytes:
+            encoded_string = base64.b64encode(logo_bytes).decode()
             logo_ext = os.path.splitext(str(empresa_atual.logo_path))[1].lower()
             logo_mime = "image/png" if logo_ext == ".png" else "image/jpeg"
             
@@ -2842,9 +3066,9 @@ else:
         st.markdown('<div style="height: 85px;"></div>', unsafe_allow_html=True)
 
         # Renderização do Avatar do Usuário (Rodapé HTML - Sem Placeholder)
-        if os.path.exists(avatar_path):
-            with open(avatar_path, "rb") as image_file:
-                encoded_avatar = base64.b64encode(image_file.read()).decode()
+        avatar_bytes = ler_bytes_privado(avatar_path)
+        if avatar_bytes:
+            encoded_avatar = base64.b64encode(avatar_bytes).decode()
             avatar_html = f'<img src="data:image/png;base64,{encoded_avatar}" class="profile-avatar" style="object-fit: cover;">'
         else:
             letra_inicial = st.session_state["nome"][0].upper() if st.session_state.get("nome") else "U"
@@ -2898,7 +3122,7 @@ else:
                 "Visão executiva da operação, contratos e desempenho financeiro."
             )
 
-            hoje = date.today()
+            hoje = hoje_local()
             mes_atual_str = hoje.strftime("%m/%Y")
             primeiro_dia_mes = hoje.replace(day=1)
             mes_anterior_str = (primeiro_dia_mes - timedelta(days=1)).strftime("%m/%Y")
@@ -2908,14 +3132,14 @@ else:
             df_status = carregar_dados_tabela(f"""
                 SELECT status, COUNT(id) AS qtd
                 FROM veiculos
-                WHERE empresa_id = :empresa_id
+                WHERE empresa_id = :empresa_id AND COALESCE(ativo, 1)=1
                 GROUP BY status
             """, emp_id)
 
             df_veiculos_dash = carregar_dados_tabela(f"""
                 SELECT id, placa, modelo, km_atual, status
                 FROM veiculos
-                WHERE empresa_id = :empresa_id
+                WHERE empresa_id = :empresa_id AND COALESCE(ativo, 1)=1
             """, emp_id)
 
             df_custos = carregar_dados_tabela(f"""
@@ -2928,7 +3152,7 @@ else:
 
             df_cobrancas = carregar_dados_tabela(f"""
                 SELECT mes_ano, valor_previsto, status, vencimento,
-                       data_recebimento, multa, juros
+                       data_recebimento, multa, juros, valor_principal_liquidado, multa_aplicada, juros_aplicados, dias_atraso_liquidacao, valor_liquidado, liquidacao_congelada, liquidado_em
                 FROM cobrancas_mensais
                 WHERE empresa_id = :empresa_id
             """, emp_id)
@@ -2978,15 +3202,7 @@ else:
                 # Enquanto estiver aberta, usa o valor previsto. Depois de recebida, usa o valor
                 # atualizado até a data do recebimento (principal + multa + juros).
                 df_cobrancas["_encargos"] = df_cobrancas.apply(
-                    lambda r: calcular_encargos_cobranca(
-                        r.get("valor_previsto"),
-                        r.get("vencimento"),
-                        r.get("status"),
-                        r.get("data_recebimento"),
-                        r.get("multa"),
-                        r.get("juros"),
-                    ),
-                    axis=1,
+                    encargos_cobranca_exibicao, axis=1
                 )
                 df_cobrancas["_valor_atualizado"] = df_cobrancas["_encargos"].apply(
                     lambda x: float(x["valor_atualizado"])
@@ -3142,7 +3358,7 @@ else:
                 df_v_km = carregar_dados_tabela(f"""
                     SELECT id, placa, km_atual
                     FROM veiculos
-                    WHERE empresa_id = :empresa_id AND km_atual>0
+                    WHERE empresa_id = :empresa_id AND COALESCE(ativo, 1)=1 AND km_atual>0
                 """, emp_id)
                 df_manu = carregar_dados_tabela(f"""
                     SELECT veiculo_id, MAX(km_momento) AS ultimo_km
@@ -3476,7 +3692,9 @@ else:
         elif tela_ativa == "Gestão de Frota":
             page_header("Gestão de Frota", "Cadastro, saúde e análise de gastos por veículo.")
 
-            df_veiculos = carregar_dados_tabela(f"SELECT * FROM veiculos WHERE empresa_id = :empresa_id", emp_id)
+            df_veiculos = carregar_dados_tabela(
+                "SELECT * FROM veiculos WHERE empresa_id = :empresa_id AND COALESCE(ativo, 1)=1", emp_id
+            )
             total = len(df_veiculos)
 
             c1, c2, c3, c4 = st.columns(4)
@@ -3502,7 +3720,7 @@ else:
                             ca, cb, cc = st.columns([0.9, 1.15, 0.7])
                             placa = ca.text_input("Placa", placeholder="ABC-1234")
                             fabricante = cb.text_input("Fabricante", placeholder="Ex.: Fiat")
-                            ano_modelo = cc.number_input("Ano/modelo", min_value=1900, max_value=2100, step=1, value=date.today().year)
+                            ano_modelo = cc.number_input("Ano/modelo", min_value=1900, max_value=2100, step=1, value=hoje_local().year)
 
                             cm1, cm2, cm3 = st.columns(3)
                             modelo = cm1.text_input("Modelo", placeholder="Ex.: Argo")
@@ -3549,7 +3767,7 @@ else:
                                     cf2.info("Receita variável: o valor é informado por competência.")
                                     vf1, vf2 = st.columns(2)
                                     competencias_var = opcoes_competencias(12, 18)
-                                    comp_padrao = date.today().strftime("%m/%Y")
+                                    comp_padrao = hoje_local().strftime("%m/%Y")
                                     idx_comp = competencias_var.index(comp_padrao) if comp_padrao in competencias_var else 12
                                     comp_var_frota = vf1.selectbox(
                                         "Mês de referência",
@@ -3626,7 +3844,7 @@ else:
                                                 ativo=1 if is_ativo else 0,
                                                 usuario_lancamento=st.session_state["nome"],
                                                 tipo_valor=tipo_v, 
-                                                valor_mensal=valor_m if tipo_v == "Fixo" else 0.0,
+                                                valor_mensal=decimal_monetario(valor_m) if tipo_v == "Fixo" else Decimal("0.00"),
                                                 multa=multa_c, 
                                                 juros=juros_c
                                             )
@@ -3728,39 +3946,149 @@ else:
                                 logger.exception("Falha ao processar planilha de veículos")
                                 st.error("Não foi possível processar a planilha de veículos.", icon=None)
 
-                if st.session_state["perfil"] == "admin" and total > 0:
-                    with st.expander("Excluir veículo — Zona restrita"):
-                        st.caption("Ação irreversível. Remove o veículo e todo o histórico financeiro.")
-                        
-                        opcoes_v = {f"{r['modelo']} ({r['placa']})": r["id"] for _, r in df_veiculos.iterrows()}
-                        v_excluir = st.selectbox("Veículo para excluir", list(opcoes_v.keys()))
-                        confirmar = st.checkbox(f"Confirmo a exclusão permanente de {v_excluir}.")
-                        
-                        if st.button("Excluir permanentemente", use_container_width=True):
-                            if confirmar:
-                                session = SessionLocal()
-                                vid = opcoes_v[v_excluir]
-                                for M in [ManutencaoRealizada, Custo, Contrato, Veiculo]:
-                                    q = session.query(M).filter(M.empresa_id == emp_id)
-                                    if M is Veiculo:
-                                        q = q.filter(M.id == vid)
-                                    else:
-                                        q = q.filter(M.veiculo_id == vid)
-                                    q.delete(synchronize_session=False)
-                                registrar_auditoria(
-                                    session, emp_id, st.session_state["usuario_id"],
-                                    "VEICULO_EXCLUIDO", "Veiculo", int(vid),
+                if st.session_state["perfil"] == "admin":
+                    with st.expander("Arquivar / excluir veículo — Zona restrita"):
+                        st.caption(
+                            "Veículos com histórico nunca têm custos, contratos ou manutenções apagados. "
+                            "Nesses casos o Kineo apenas arquiva o cadastro. Exclusão física fica restrita "
+                            "a veículos criados por engano e sem qualquer movimentação."
+                        )
+
+                        if total > 0:
+                            opcoes_v = {
+                                f"{r['modelo']} ({r['placa']})": int(r["id"])
+                                for _, r in df_veiculos.iterrows()
+                            }
+                            v_excluir = st.selectbox(
+                                "Veículo", list(opcoes_v.keys()), key="veiculo_arquivar_excluir"
+                            )
+                            vid = opcoes_v[v_excluir]
+
+                            session_ref = SessionLocal()
+                            try:
+                                pode_excluir, hist = veiculo_pode_ser_excluido(
+                                    session_ref, emp_id, vid
                                 )
-                                session.commit()
-                                # As consultas da frota usam @st.cache_data(ttl=60).
-                                # Sem invalidar o cache, o veículo já removido do banco
-                                # continuava aparecendo na tela até uma nova navegação.
-                                st.cache_data.clear()
-                                session.close()
-                                st.success("Veículo excluído.")
-                                st.rerun()
+                            finally:
+                                session_ref.close()
+
+                            if hist.get("contratos_ativos", 0) > 0:
+                                st.warning(
+                                    "Este veículo possui contrato vigente. Finalize o contrato antes de arquivar o veículo.",
+                                    icon=None,
+                                )
+                            elif pode_excluir:
+                                confirmar = st.checkbox(
+                                    f"Confirmo a exclusão permanente de {v_excluir}.",
+                                    key="confirmar_exclusao_veiculo_sem_historico",
+                                )
+                                if st.button(
+                                    "Excluir cadastro sem histórico",
+                                    use_container_width=True,
+                                    disabled=not confirmar,
+                                    key="btn_excluir_veiculo_sem_historico",
+                                ):
+                                    session = SessionLocal()
+                                    try:
+                                        veiculo = tenant_get(session, Veiculo, vid, emp_id)
+                                        if veiculo is None:
+                                            raise ValueError("Veículo não encontrado.")
+                                        registrar_auditoria(
+                                            session, emp_id, st.session_state["usuario_id"],
+                                            "VEICULO_EXCLUIDO", "Veiculo", int(vid),
+                                            "Exclusão física autorizada por ausência de histórico.",
+                                        )
+                                        session.delete(veiculo)
+                                        session.commit()
+                                        st.cache_data.clear()
+                                        st.success("Cadastro de veículo sem histórico excluído.")
+                                        st.rerun()
+                                    except Exception:
+                                        session.rollback()
+                                        logger.exception("Falha ao excluir veículo sem histórico")
+                                        st.error("Não foi possível excluir o veículo.", icon=None)
+                                    finally:
+                                        session.close()
                             else:
-                                st.error("Marque a confirmação para prosseguir.", icon=None)
+                                st.info(
+                                    f"Histórico encontrado: {hist['contratos']} contrato(s), "
+                                    f"{hist['custos']} custo(s), {hist['manutencoes']} manutenção(ões) e "
+                                    f"{hist['substituicoes']} substituição(ões). O histórico será preservado.",
+                                    icon=None,
+                                )
+                                confirmar_arq = st.checkbox(
+                                    f"Confirmo o arquivamento de {v_excluir}.",
+                                    key="confirmar_arquivamento_veiculo",
+                                )
+                                if st.button(
+                                    "Arquivar veículo",
+                                    use_container_width=True,
+                                    disabled=not confirmar_arq,
+                                    key="btn_arquivar_veiculo",
+                                ):
+                                    session = SessionLocal()
+                                    try:
+                                        veiculo = tenant_get(session, Veiculo, vid, emp_id)
+                                        if veiculo is None:
+                                            raise ValueError("Veículo não encontrado.")
+                                        veiculo.ativo = 0
+                                        veiculo.status = "Arquivado"
+                                        registrar_auditoria(
+                                            session, emp_id, st.session_state["usuario_id"],
+                                            "VEICULO_ARQUIVADO", "Veiculo", int(vid),
+                                            "Cadastro arquivado com histórico operacional e financeiro preservado.",
+                                        )
+                                        session.commit()
+                                        st.cache_data.clear()
+                                        st.success("Veículo arquivado sem perda de histórico.")
+                                        st.rerun()
+                                    except Exception:
+                                        session.rollback()
+                                        logger.exception("Falha ao arquivar veículo")
+                                        st.error("Não foi possível arquivar o veículo.", icon=None)
+                                    finally:
+                                        session.close()
+                        else:
+                            st.caption("Nenhum veículo ativo disponível para arquivar ou excluir.")
+
+                        df_arquivados = carregar_dados_tabela(
+                            "SELECT id, placa, modelo FROM veiculos "
+                            "WHERE empresa_id=:empresa_id AND COALESCE(ativo,1)=0 ORDER BY modelo, placa",
+                            emp_id,
+                        )
+                        if not df_arquivados.empty:
+                            st.markdown("**Veículos arquivados**")
+                            op_arq = {
+                                f"{r['modelo']} ({r['placa']})": int(r["id"])
+                                for _, r in df_arquivados.iterrows()
+                            }
+                            arq_sel = st.selectbox(
+                                "Reativar veículo", list(op_arq.keys()), key="reativar_veiculo_sel"
+                            )
+                            if st.button(
+                                "Reativar cadastro", use_container_width=True, key="btn_reativar_veiculo"
+                            ):
+                                session = SessionLocal()
+                                try:
+                                    veiculo = tenant_get(session, Veiculo, op_arq[arq_sel], emp_id)
+                                    if veiculo is None:
+                                        raise ValueError("Veículo não encontrado.")
+                                    veiculo.ativo = 1
+                                    veiculo.status = "Disponível"
+                                    registrar_auditoria(
+                                        session, emp_id, st.session_state["usuario_id"],
+                                        "VEICULO_REATIVADO", "Veiculo", veiculo.id,
+                                    )
+                                    session.commit()
+                                    st.cache_data.clear()
+                                    st.success("Veículo reativado.")
+                                    st.rerun()
+                                except Exception:
+                                    session.rollback()
+                                    logger.exception("Falha ao reativar veículo")
+                                    st.error("Não foi possível reativar o veículo.", icon=None)
+                                finally:
+                                    session.close()
 
             # ── Aba: Alterar Status ────────────────────────────────────────────────
             with tab_status:
@@ -4211,7 +4539,7 @@ else:
                         df_contagem_veiculos = carregar_dados_tabela(f"""
                             SELECT plano_manutencao_id AS plano_id, COUNT(*) AS veiculos
                             FROM veiculos
-                            WHERE empresa_id = :empresa_id AND plano_manutencao_id IS NOT NULL
+                            WHERE empresa_id = :empresa_id AND COALESCE(ativo, 1)=1 AND plano_manutencao_id IS NOT NULL
                             GROUP BY plano_manutencao_id
                         """, emp_id)
                         df_show = df_planos.copy()
@@ -4335,7 +4663,7 @@ else:
             df_veiculos = carregar_dados_tabela(f"""
                 SELECT id, placa, modelo, km_atual, status, plano_manutencao_id
                 FROM veiculos
-                WHERE empresa_id = :empresa_id
+                WHERE empresa_id = :empresa_id AND COALESCE(ativo, 1)=1
                 ORDER BY modelo, placa
             """, emp_id)
 
@@ -4664,24 +4992,24 @@ else:
                                         if not ok_upload:
                                             raise ValueError(erro_upload)
                                         ext = arquivo.name.rsplit(".", 1)[-1].lower()
-                                        comp_path = os.path.join(
-                                            "comprovantes",
-                                            f"comp_{uuid.uuid4().hex}.{ext}"
+                                        comp_path = salvar_upload_privado(
+                                            arquivo,
+                                            f"comprovantes/{emp_id}/comp_{uuid.uuid4().hex}.{ext}",
                                         )
 
-                                        with open(comp_path, "wb") as f:
-                                            f.write(arquivo.getbuffer())
-
                                     custo_manutencao_base_id = None
+                                    valor_total_decimal = decimal_monetario(valor)
 
                                     if (
                                         forma_pag == "Cartão de Crédito"
                                         and condicao_pag == "Parcelado"
                                         and parcelas_q
                                     ):
-                                        valor_parcela = valor / parcelas_q
+                                        valores_parcelas = dividir_valor_parcelas(
+                                            valor_total_decimal, int(parcelas_q)
+                                        )
 
-                                        for i in range(int(parcelas_q)):
+                                        for i, valor_parcela in enumerate(valores_parcelas):
                                             dt_parcela = add_months(
                                                 data_custo,
                                                 i
@@ -4760,7 +5088,7 @@ else:
                                             data_custo=data_custo,
                                             categoria=cat,
                                             descricao=descricao,
-                                            valor_total=valor,
+                                            valor_total=valor_total_decimal,
                                             km_momento=km_val,
                                             litros=litros,
                                             usuario_lancamento=(
@@ -4981,7 +5309,7 @@ else:
                             )
 
                             df_filtrado = df_custos.copy()
-                            hoje_custos = date.today()
+                            hoje_custos = hoje_local()
 
                             if periodo_sel == "Este mês":
                                 df_filtrado = df_filtrado[
@@ -5245,32 +5573,18 @@ else:
 
                                         caminho = opcoes_anx[anx_sel]
 
-                                        if caminho and os.path.exists(
-                                            caminho
-                                        ):
-                                            if caminho.lower().endswith(
-                                                ".pdf"
-                                            ):
-                                                with open(
-                                                    caminho,
-                                                    "rb"
-                                                ) as f:
-                                                    st.download_button(
-                                                        "Baixar PDF",
-                                                        f,
-                                                        os.path.basename(
-                                                            caminho
-                                                        ),
-                                                        "application/pdf",
-                                                        key=(
-                                                            "custos_baixar_pdf"
-                                                        )
-                                                    )
-                                            else:
-                                                st.image(
-                                                    caminho,
-                                                    use_container_width=True
+                                        dados_anexo = ler_bytes_privado(caminho) if caminho else None
+                                        if dados_anexo:
+                                            if str(caminho).lower().endswith(".pdf"):
+                                                st.download_button(
+                                                    "Baixar PDF",
+                                                    dados_anexo,
+                                                    os.path.basename(str(caminho)),
+                                                    "application/pdf",
+                                                    key="custos_baixar_pdf"
                                                 )
+                                            else:
+                                                st.image(dados_anexo, use_container_width=True)
                                         else:
                                             st.warning(
                                                 "O arquivo do comprovante "
@@ -5354,14 +5668,24 @@ else:
                                                     )
 
                                                 else:
+                                                    comprovante_excluir = custo_db.comprovante
+                                                    custo_snapshot = (
+                                                        f"Categoria: {custo_db.categoria}; valor: {custo_db.valor_total}; "
+                                                        f"veículo: {custo_db.veiculo_id}; contrato: {custo_db.contrato_id}"
+                                                    )
                                                     historicos_vinculados = session.query(ManutencaoRealizada).filter(
                                                         ManutencaoRealizada.empresa_id == emp_id,
                                                         ManutencaoRealizada.custo_id == custo_db.id
                                                     ).all()
                                                     for historico in historicos_vinculados:
                                                         session.delete(historico)
+                                                    registrar_auditoria(
+                                                        session, emp_id, st.session_state["usuario_id"],
+                                                        "CUSTO_EXCLUIDO", "Custo", custo_db.id, custo_snapshot,
+                                                    )
                                                     session.delete(custo_db)
                                                     session.commit()
+                                                    excluir_storage(comprovante_excluir)
                                                     st.cache_data.clear()
 
                                                     st.success(
@@ -5448,7 +5772,7 @@ else:
                 )
 
                 competencias = opcoes_competencias(18, 18)
-                comp_atual = date.today().strftime("%m/%Y")
+                comp_atual = hoje_local().strftime("%m/%Y")
                 idx_atual = competencias.index(comp_atual) if comp_atual in competencias else len(competencias) // 2
 
                 f1, f2 = st.columns(2)
@@ -5479,7 +5803,7 @@ else:
                             id, contrato_id, recorrente_id, mes_ano, tipo, cliente,
                             forma_cobranca, valor_previsto, emissao_prevista, vencimento,
                             status, data_emissao, data_envio, num_boleto,
-                            data_recebimento, multa, juros, observacoes
+                            data_recebimento, multa, juros, valor_principal_liquidado, multa_aplicada, juros_aplicados, dias_atraso_liquidacao, valor_liquidado, liquidacao_congelada, liquidado_em, observacoes
                         FROM cobrancas_mensais
                         WHERE empresa_id = :empresa_id
                     """, emp_id)
@@ -5517,15 +5841,7 @@ else:
                             .apply(normalizar_status_cobranca)
                         )
                         df_cobrancas_fin["_encargos"] = df_cobrancas_fin.apply(
-                            lambda r: calcular_encargos_cobranca(
-                                r.get("valor_previsto"),
-                                r.get("vencimento"),
-                                r.get("status"),
-                                r.get("data_recebimento"),
-                                r.get("multa"),
-                                r.get("juros"),
-                            ),
-                            axis=1,
+                            encargos_cobranca_exibicao, axis=1
                         )
                         df_cobrancas_fin["_valor_atualizado"] = df_cobrancas_fin[
                             "_encargos"
@@ -6258,6 +6574,11 @@ else:
                                     )
                                     session.add(nova_recorrencia)
                                     session.flush()
+                                    registrar_auditoria(
+                                        session, emp_id, st.session_state["usuario_id"],
+                                        "COBRANCA_RECORRENTE_CRIADA", "CobrancaRecorrente", nova_recorrencia.id,
+                                        f"Cliente: {cliente_limpo}; contrato: {contrato_id_rec}; tipo: {c_tipo}",
+                                    )
 
                                     # Se um contrato variável recebeu valor por competência antes
                                     # de sua regra recorrente ser cadastrada, completa agora os
@@ -6512,6 +6833,11 @@ else:
                                     if pd.notna(row["observacoes"])
                                     else None
                                 )
+                                registrar_auditoria(
+                                    session, emp_id, st.session_state["usuario_id"],
+                                    "COBRANCA_RECORRENTE_ATUALIZADA", "CobrancaRecorrente", rec_db.id,
+                                    f"Ativo: {rec_db.ativo}; emissão: dia {rec_db.dia_emissao}; vencimento: dia {rec_db.dia_vencimento}",
+                                )
 
                             session.commit()
                             st.cache_data.clear()
@@ -6531,7 +6857,7 @@ else:
             with tab_mensal:
                 st.markdown("### Controle mensal")
                 competencias = opcoes_competencias(12, 18)
-                comp_atual = date.today().strftime("%m/%Y")
+                comp_atual = hoje_local().strftime("%m/%Y")
                 idx_atual = competencias.index(comp_atual) if comp_atual in competencias else 12
                 mes_sel = st.selectbox(
                     "Competência",
@@ -6620,9 +6946,9 @@ else:
                                     )
                                 )
                                 valor = (
-                                    0.0
+                                    Decimal("0.00")
                                     if rec.tipo_valor == "Variável"
-                                    else parse_valor_cobranca(rec.valor_mensal)
+                                    else decimal_monetario(rec.valor_mensal)
                                 )
 
                                 session.add(CobrancaMensal(
@@ -6647,7 +6973,28 @@ else:
                                 ))
                                 novos += 1
 
-                            session.commit()
+                            registrar_auditoria(
+                                session, emp_id, st.session_state["usuario_id"],
+                                "COBRANCAS_COMPETENCIA_GERADA", "CobrancaMensal", None,
+                                f"Competência: {mes_sel}; cobranças geradas: {novos}",
+                            )
+                            try:
+                                session.commit()
+                            except IntegrityError:
+                                session.rollback()
+                                st.cache_data.clear()
+                                st.warning(
+                                    "A competência já foi gerada por outra operação. A lista será atualizada sem duplicar cobranças.",
+                                    icon=None,
+                                )
+                                session.close()
+                                st.rerun()
+                            except Exception:
+                                session.rollback()
+                                logger.exception("Falha ao gerar cobranças recorrentes da competência")
+                                st.error("Não foi possível gerar as cobranças desta competência.", icon=None)
+                                session.close()
+                                st.stop()
                             st.cache_data.clear()
                             st.success(
                                 f"{novos} cobrança(s) gerada(s) para {mes_sel}."
@@ -6666,7 +7013,7 @@ else:
                         id, contrato_id, recorrente_id, mes_ano, tipo, cliente,
                         forma_cobranca, valor_previsto, emissao_prevista,
                         vencimento, status, data_emissao, data_envio,
-                        num_boleto, data_recebimento, multa, juros, observacoes
+                        num_boleto, data_recebimento, multa, juros, valor_principal_liquidado, multa_aplicada, juros_aplicados, dias_atraso_liquidacao, valor_liquidado, liquidacao_congelada, liquidado_em, observacoes
                     FROM cobrancas_mensais
                     WHERE empresa_id = :empresa_id
                       AND mes_ano = :mes_sel
@@ -6701,15 +7048,7 @@ else:
                     )
 
                     df_mensal["_encargos"] = df_mensal.apply(
-                        lambda r: calcular_encargos_cobranca(
-                            r.get("valor_previsto"),
-                            r.get("vencimento"),
-                            r.get("status"),
-                            r.get("data_recebimento"),
-                            r.get("multa"),
-                            r.get("juros"),
-                        ),
-                        axis=1,
+                        encargos_cobranca_exibicao, axis=1
                     )
                     df_mensal["dias_atraso"] = df_mensal["_encargos"].apply(
                         lambda x: int(x["dias_atraso"])
@@ -6722,6 +7061,12 @@ else:
                     )
                     df_mensal["valor_atualizado"] = df_mensal["_encargos"].apply(
                         lambda x: float(x["valor_atualizado"])
+                    )
+                    df_mensal["liquidacao_status"] = df_mensal.apply(
+                        lambda r: "Congelada"
+                        if int(r.get("liquidacao_congelada") or 0) == 1 and pd.notna(r.get("valor_liquidado"))
+                        else "Em aberto",
+                        axis=1,
                     )
 
                     validas_mes = df_mensal[
@@ -6822,6 +7167,10 @@ else:
                         "status": st.column_config.SelectboxColumn(
                             "Status", options=STATUS_COBRANCA
                         ),
+                        "liquidacao_status": st.column_config.TextColumn(
+                            "Liquidação", disabled=True,
+                            help="Congelada = principal, multa, juros e data de recebimento preservados como histórico."
+                        ),
                         "data_envio": st.column_config.DateColumn(
                             "Data de envio", format="DD/MM/YYYY"
                         ),
@@ -6854,12 +7203,16 @@ else:
                     COLS_COB = [
                         "id", "tipo", "cliente", "forma_cobranca", "valor_previsto",
                         "emissao_prevista", "vencimento", "data_emissao",
-                        "num_boleto", "status", "data_envio",
+                        "num_boleto", "status", "liquidacao_status", "data_envio",
                         "data_recebimento", "dias_atraso", "multa", "juros",
                         "valor_multa_calculada", "valor_juros_calculados",
                         "valor_atualizado", "observacoes"
                     ]
 
+                    st.caption(
+                        "Após o recebimento, a liquidação financeira é congelada. Alterações posteriores em multa, "
+                        "juros ou valor contratual não reescrevem o histórico já recebido."
+                    )
                     st.markdown("### Cobranças recorrentes")
                     df_rec_mes = df_mensal[
                         df_mensal["tipo"] == "Recorrente"
@@ -6942,6 +7295,9 @@ else:
                     ):
                         session = SessionLocal()
                         try:
+                            alteracoes = 0
+                            liquidacoes_novas = 0
+                            liquidadas_preservadas = 0
                             for ed in [ed_rec_mes, ed_pont_mes]:
                                 if ed is None:
                                     continue
@@ -6952,9 +7308,6 @@ else:
                                     if cob is None or cob.empresa_id != emp_id:
                                         continue
 
-                                    cob.valor_previsto = parse_valor_cobranca(
-                                        row["valor_previsto"]
-                                    )
                                     cob.data_emissao = coerce_date(row.get("data_emissao"))
                                     cob.data_envio = coerce_date(row.get("data_envio"))
                                     cob.num_boleto = (
@@ -6962,36 +7315,63 @@ else:
                                         if pd.notna(row["num_boleto"])
                                         else None
                                     )
-                                    status_informado = normalizar_status_cobranca(
-                                        row["status"]
-                                    )
-                                    data_recebimento = coerce_date(
-                                        row.get("data_recebimento")
-                                    )
-
-                                    # Preencher a data de recebimento conclui o fluxo:
-                                    # a cobrança passa automaticamente para Recebida.
-                                    # Cancelada e Não cobrar permanecem sob decisão explícita.
-                                    if (
-                                        data_recebimento is not None
-                                        and status_informado not in ["Cancelada", "Não cobrar"]
-                                    ):
-                                        cob.status = "Recebida"
-                                    else:
-                                        cob.status = status_informado
-
-                                    cob.multa = float(row["multa"] or 0)
-                                    cob.juros = float(row["juros"] or 0)
-                                    cob.data_recebimento = data_recebimento
                                     cob.observacoes = (
                                         str(row["observacoes"]).strip()
                                         if pd.notna(row["observacoes"])
                                         else None
                                     )
 
+                                    # Uma liquidação congelada é histórico financeiro: principal,
+                                    # multa, juros, atraso e data de recebimento não são recalculados.
+                                    if int(cob.liquidacao_congelada or 0) == 1 and cob.valor_liquidado is not None:
+                                        cob.status = "Recebida"
+                                        liquidadas_preservadas += 1
+                                        alteracoes += 1
+                                        continue
+
+                                    principal = decimal_monetario(row["valor_previsto"])
+                                    status_informado = normalizar_status_cobranca(row["status"])
+                                    data_recebimento = coerce_date(row.get("data_recebimento"))
+                                    multa_pct = float(row["multa"] or 0)
+                                    juros_pct = float(row["juros"] or 0)
+
+                                    if status_informado == "Recebida" and data_recebimento is None:
+                                        raise ValueError(
+                                            f"A cobrança #{cob.id} está marcada como Recebida, mas não possui data de recebimento."
+                                        )
+
+                                    if (
+                                        data_recebimento is not None
+                                        and status_informado not in ["Cancelada", "Não cobrar"]
+                                    ):
+                                        congelar_liquidacao(
+                                            cob, principal, data_recebimento, multa_pct, juros_pct
+                                        )
+                                        registrar_auditoria(
+                                            session, emp_id, st.session_state["usuario_id"],
+                                            "COBRANCA_LIQUIDADA", "CobrancaMensal", cob.id,
+                                            f"Competência: {cob.mes_ano}; principal: {cob.valor_principal_liquidado}; "
+                                            f"multa: {cob.multa_aplicada}; juros: {cob.juros_aplicados}; "
+                                            f"valor liquidado: {cob.valor_liquidado}",
+                                        )
+                                        liquidacoes_novas += 1
+                                    else:
+                                        cob.valor_previsto = principal
+                                        cob.status = status_informado
+                                        cob.multa = multa_pct
+                                        cob.juros = juros_pct
+                                        cob.data_recebimento = None
+                                    alteracoes += 1
+
+                            registrar_auditoria(
+                                session, emp_id, st.session_state["usuario_id"],
+                                "COBRANCAS_COMPETENCIA_ATUALIZADA", "CobrancaMensal", None,
+                                f"Competência: {mes_sel}; registros: {alteracoes}; "
+                                f"novas liquidações: {liquidacoes_novas}; liquidações preservadas: {liquidadas_preservadas}",
+                            )
                             session.commit()
                             st.cache_data.clear()
-                            st.success("Competência atualizada.")
+                            st.success("Competência atualizada. Liquidações recebidas foram congeladas no histórico.")
                             st.rerun()
                         except Exception:
                             session.rollback()
@@ -7097,7 +7477,7 @@ else:
                         else:
                             session = SessionLocal()
                             try:
-                                session.add(CobrancaMensal(
+                                cobranca_pontual = CobrancaMensal(
                                     empresa_id=emp_id,
                                     contrato_id=p_contrato_id,
                                     recorrente_id=None,
@@ -7105,14 +7485,21 @@ else:
                                     tipo="Pontual",
                                     cliente=str(p_cli).strip(),
                                     forma_cobranca=p_form,
-                                    valor_previsto=float(p_val),
+                                    valor_previsto=decimal_monetario(p_val),
                                     emissao_prevista=p_emis,
                                     vencimento=p_venc,
                                     status="Pendente de emissão",
                                     multa=float(p_multa),
                                     juros=float(p_juros),
                                     observacoes=p_obs.strip() or None
-                                ))
+                                )
+                                session.add(cobranca_pontual)
+                                session.flush()
+                                registrar_auditoria(
+                                    session, emp_id, st.session_state["usuario_id"],
+                                    "COBRANCA_PONTUAL_CRIADA", "CobrancaMensal", cobranca_pontual.id,
+                                    f"Competência: {mes_sel}; valor: {cobranca_pontual.valor_previsto}",
+                                )
                                 session.commit()
                                 st.cache_data.clear()
                                 st.success("Cobrança pontual adicionada.")
@@ -7129,7 +7516,7 @@ else:
             df_veiculos = carregar_dados_tabela(f"""
                 SELECT id, placa, modelo, status
                 FROM veiculos
-                WHERE empresa_id = :empresa_id
+                WHERE empresa_id = :empresa_id AND COALESCE(ativo, 1)=1
                 ORDER BY modelo, placa
             """, emp_id)
 
@@ -7290,7 +7677,7 @@ else:
                             cf.info("Receita variável: não existe mensalidade fixa no contrato.")
                             cv1, cv2 = st.columns(2)
                             competencias_var = opcoes_competencias(12, 18)
-                            comp_padrao = date.today().strftime("%m/%Y")
+                            comp_padrao = hoje_local().strftime("%m/%Y")
                             idx_comp = competencias_var.index(comp_padrao) if comp_padrao in competencias_var else 12
                             comp_var_novo = cv1.selectbox(
                                 "Mês de referência",
@@ -7327,7 +7714,7 @@ else:
                                         empresa_id=emp_id, veiculo_id=veiculo.id, cliente=cliente.strip(), cnpj=cnpj.strip(),
                                         data_inicio=d_inicio, data_fim=None, km_inicial=km_ini, km_final=0.0, ativo=1,
                                         usuario_lancamento=st.session_state["nome"], tipo_valor=tipo_v,
-                                        valor_mensal=valor_m if tipo_v == "Fixo" else 0.0, multa=multa_c, juros=juros_c
+                                        valor_mensal=decimal_monetario(valor_m) if tipo_v == "Fixo" else Decimal("0.00"), multa=multa_c, juros=juros_c
                                     )
                                     session.add(contrato)
                                     session.flush()
@@ -7382,7 +7769,7 @@ else:
                         if not e_ativo:
                             ee, ef = st.columns(2)
                             dt_fim = pd.to_datetime(row_ct["data_fim"], errors="coerce")
-                            e_dfim = ee.date_input("Baixa do Contrato", value=date.today() if pd.isna(dt_fim) else dt_fim.date(), key="ec_df")
+                            e_dfim = ee.date_input("Baixa do Contrato", value=hoje_local() if pd.isna(dt_fim) else dt_fim.date(), key="ec_df")
                             e_kmfim = ef.number_input("Odômetro de Chegada", min_value=0.0, step=50.0, value=e_kmfim, key="ec_kmf")
                             st.info(
                                 "Ao encerrar o contrato, o Kineo desativa a cobrança recorrente e cancela "
@@ -7411,7 +7798,7 @@ else:
                             eh.info("Receita variável: o valor é controlado por competência.")
                             ev1, ev2 = st.columns(2)
                             competencias_var = opcoes_competencias(12, 18)
-                            comp_padrao = date.today().strftime("%m/%Y")
+                            comp_padrao = hoje_local().strftime("%m/%Y")
                             idx_comp = competencias_var.index(comp_padrao) if comp_padrao in competencias_var else 12
                             e_comp_var = ev1.selectbox(
                                 "Mês de referência do pagamento",
@@ -7469,7 +7856,7 @@ else:
                                 contrato.cnpj = e_cnpj.strip()
                                 contrato.data_inicio = e_dinicio
                                 contrato.tipo_valor = e_tipo
-                                contrato.valor_mensal = e_val if e_tipo == "Fixo" else 0.0
+                                contrato.valor_mensal = decimal_monetario(e_val) if e_tipo == "Fixo" else Decimal("0.00")
                                 contrato.multa = e_multa
                                 contrato.juros = e_juros
 
@@ -7742,8 +8129,9 @@ else:
 
                 with c_p1:
                     st.markdown("**Foto de Perfil**")
-                    if os.path.exists(avatar_path):
-                        st.image(avatar_path, use_container_width=True)
+                    avatar_perfil_bytes = ler_bytes_privado(avatar_path)
+                    if avatar_perfil_bytes:
+                        st.image(avatar_perfil_bytes, use_container_width=True)
                     else:
                         st.info("Sem foto", icon=None)
 
@@ -7755,7 +8143,9 @@ else:
                     )
                     if st.button("Salvar Imagem", use_container_width=True, key="perfil_salvar_avatar"):
                         if novo_avatar:
-                            ok, erro = salvar_imagem_segura(novo_avatar, avatar_path, max_mb=5)
+                            ok, erro, _avatar_ref = salvar_imagem_segura(
+                                novo_avatar, f"logos/avatars/avatar_{st.session_state['usuario_id']}.png", max_mb=5
+                            )
                             if ok:
                                 session = SessionLocal()
                                 try:
@@ -7876,7 +8266,7 @@ else:
                                 else:
                                     u.senha = hash_password(ns1)
                                     u.must_change_password = 0
-                                    u.senha_alterada_em = datetime.utcnow()
+                                    u.senha_alterada_em = agora_utc()
                                     u.tentativas_login = 0
                                     u.bloqueado_ate = None
                                     registrar_auditoria(
@@ -8063,11 +8453,12 @@ else:
                                         else:
                                             emp.nome_fantasia = nome_limpo
                                             if logo_file:
-                                                path = os.path.join("logos", f"logo_{emp_id}.png")
-                                                ok, erro = salvar_imagem_segura(logo_file, path, max_mb=5)
+                                                ok, erro, logo_ref = salvar_imagem_segura(
+                                                    logo_file, f"logos/empresas/{emp_id}/logo.png", max_mb=5
+                                                )
                                                 if not ok:
                                                     raise ValueError(erro)
-                                                emp.logo_path = path
+                                                emp.logo_path = logo_ref
                                             registrar_auditoria(
                                                 session,
                                                 emp_id,

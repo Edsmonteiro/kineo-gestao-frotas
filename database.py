@@ -1,7 +1,7 @@
 import os
 import secrets
 from datetime import datetime
-from decimal import Decimal
+from decimal import Decimal, ROUND_HALF_UP
 
 import streamlit as st
 from sqlalchemy import (
@@ -14,6 +14,8 @@ from sqlalchemy import (
     DateTime,
     Numeric,
     ForeignKey,
+    ForeignKeyConstraint,
+    UniqueConstraint,
     Index,
     inspect,
     text,
@@ -66,6 +68,11 @@ IS_PRODUCTION = APP_ENV in {"production", "prod"}
 IS_HOMOLOG = APP_ENV in {"staging", "homolog", "homologacao", "homologação"}
 IS_MANAGED_ENV = IS_PRODUCTION or IS_HOMOLOG
 
+if IS_MANAGED_ENV and DATABASE_URL.startswith("sqlite"):
+    raise RuntimeError(
+        "SQLite é permitido apenas em desenvolvimento local. Homologação/produção exigem PostgreSQL/Neon."
+    )
+
 # Homologação e produção devem reproduzir o mesmo processo controlado de schema.
 # Somente DEV local pode executar evolução automática de estrutura.
 _auto_migrate_cfg = str(_secret_value("KINEO_AUTO_MIGRATE", "")).strip().lower()
@@ -100,7 +107,7 @@ if DATABASE_URL.startswith("sqlite"):
         cursor.close()
 else:
     connect_args = {}
-    if IS_PRODUCTION and "sslmode=" not in str(DATABASE_URL).lower():
+    if IS_MANAGED_ENV and "sslmode=" not in str(DATABASE_URL).lower():
         connect_args["sslmode"] = "require"
     engine = create_engine(
         DATABASE_URL,
@@ -191,6 +198,7 @@ class Empresa(Base):
 
 class Usuario(Base):
     __tablename__ = "usuarios"
+    __table_args__ = (UniqueConstraint("empresa_id", "id", name="uq_usuarios_empresa_id"),)
     id = Column(Integer, primary_key=True, index=True)
     empresa_id = Column(Integer, ForeignKey("empresas.id"), default=1, nullable=False, index=True)
     nome = Column(String, nullable=False)
@@ -209,9 +217,13 @@ class Usuario(Base):
 
 class Veiculo(Base):
     __tablename__ = "veiculos"
+    __table_args__ = (
+        UniqueConstraint("empresa_id", "id", name="uq_veiculos_empresa_id"),
+        UniqueConstraint("empresa_id", "placa", name="uq_veiculos_empresa_placa"),
+    )
     id = Column(Integer, primary_key=True, index=True)
     empresa_id = Column(Integer, ForeignKey("empresas.id"), default=1, nullable=False, index=True)
-    placa = Column(String, unique=True, nullable=False)
+    placa = Column(String, nullable=False)
     fabricante = Column(String, nullable=True)
     modelo = Column(String, nullable=False)
     ano_modelo = Column(Integer, nullable=True)
@@ -222,10 +234,19 @@ class Veiculo(Base):
     plano_manutencao_id = Column(Integer, ForeignKey("planos_manutencao.id"), nullable=True)
     km_atual = Column(Float, default=0.0)
     status = Column(String, default="Disponível")
+    ativo = Column(Integer, default=1, nullable=False, index=True)
 
 
 class Contrato(Base):
     __tablename__ = "contratos"
+    __table_args__ = (
+        UniqueConstraint("empresa_id", "id", name="uq_contratos_empresa_id"),
+        ForeignKeyConstraint(
+            ["empresa_id", "veiculo_id"],
+            ["veiculos.empresa_id", "veiculos.id"],
+            name="fk_contratos_tenant_veiculo",
+        ),
+    )
     id = Column(Integer, primary_key=True, index=True)
     empresa_id = Column(Integer, ForeignKey("empresas.id"), default=1, nullable=False, index=True)
     veiculo_id = Column(Integer, ForeignKey("veiculos.id"), nullable=False, index=True)
@@ -245,6 +266,11 @@ class Contrato(Base):
 
 class SubstituicaoContrato(Base):
     __tablename__ = "substituicoes_contrato"
+    __table_args__ = (
+        ForeignKeyConstraint(["empresa_id", "contrato_id"], ["contratos.empresa_id", "contratos.id"], name="fk_substituicoes_tenant_contrato"),
+        ForeignKeyConstraint(["empresa_id", "veiculo_principal_id"], ["veiculos.empresa_id", "veiculos.id"], name="fk_substituicoes_tenant_principal"),
+        ForeignKeyConstraint(["empresa_id", "veiculo_substituto_id"], ["veiculos.empresa_id", "veiculos.id"], name="fk_substituicoes_tenant_substituto"),
+    )
     id = Column(Integer, primary_key=True, index=True)
     empresa_id = Column(Integer, ForeignKey("empresas.id"), default=1, nullable=False, index=True)
     contrato_id = Column(Integer, ForeignKey("contratos.id"), nullable=False, index=True)
@@ -258,6 +284,13 @@ class SubstituicaoContrato(Base):
 
 class Motorista(Base):
     __tablename__ = "motoristas"
+    __table_args__ = (
+        UniqueConstraint("empresa_id", "id", name="uq_motoristas_empresa_id"),
+        UniqueConstraint("empresa_id", "cpf", name="uq_motoristas_empresa_cpf"),
+        UniqueConstraint("empresa_id", "cnh", name="uq_motoristas_empresa_cnh"),
+        UniqueConstraint("empresa_id", "matricula", name="uq_motoristas_empresa_matricula"),
+        ForeignKeyConstraint(["empresa_id", "usuario_id"], ["usuarios.empresa_id", "usuarios.id"], name="fk_motoristas_tenant_usuario"),
+    )
     id = Column(Integer, primary_key=True, index=True)
     empresa_id = Column(Integer, ForeignKey("empresas.id"), default=1, nullable=False, index=True)
     nome = Column(String, nullable=False, index=True)
@@ -274,6 +307,12 @@ class Motorista(Base):
 
 class Custo(Base):
     __tablename__ = "custos"
+    __table_args__ = (
+        UniqueConstraint("empresa_id", "id", name="uq_custos_empresa_id"),
+        ForeignKeyConstraint(["empresa_id", "veiculo_id"], ["veiculos.empresa_id", "veiculos.id"], name="fk_custos_tenant_veiculo"),
+        ForeignKeyConstraint(["empresa_id", "contrato_id"], ["contratos.empresa_id", "contratos.id"], name="fk_custos_tenant_contrato"),
+        ForeignKeyConstraint(["empresa_id", "motorista_id"], ["motoristas.empresa_id", "motoristas.id"], name="fk_custos_tenant_motorista"),
+    )
     id = Column(Integer, primary_key=True, index=True)
     empresa_id = Column(Integer, ForeignKey("empresas.id"), default=1, nullable=False, index=True)
     veiculo_id = Column(Integer, ForeignKey("veiculos.id"), nullable=False, index=True)
@@ -298,6 +337,7 @@ class Custo(Base):
 
 class PlanoManutencao(Base):
     __tablename__ = "planos_manutencao"
+    __table_args__ = (UniqueConstraint("empresa_id", "id", name="uq_planos_empresa_id"),)
     id = Column(Integer, primary_key=True, index=True)
     empresa_id = Column(Integer, ForeignKey("empresas.id"), default=1, nullable=False, index=True)
     nome = Column(String, nullable=False)
@@ -313,6 +353,10 @@ class PlanoManutencao(Base):
 
 class ItemPlanoManutencao(Base):
     __tablename__ = "itens_plano_manutencao"
+    __table_args__ = (
+        UniqueConstraint("empresa_id", "id", name="uq_itens_plano_empresa_id"),
+        ForeignKeyConstraint(["empresa_id", "plano_id"], ["planos_manutencao.empresa_id", "planos_manutencao.id"], name="fk_itens_plano_tenant_plano"),
+    )
     id = Column(Integer, primary_key=True, index=True)
     empresa_id = Column(Integer, ForeignKey("empresas.id"), default=1, nullable=False, index=True)
     plano_id = Column(Integer, ForeignKey("planos_manutencao.id"), nullable=False, index=True)
@@ -328,6 +372,11 @@ class ItemPlanoManutencao(Base):
 
 class ManutencaoRealizada(Base):
     __tablename__ = "manutencoes_realizadas"
+    __table_args__ = (
+        ForeignKeyConstraint(["empresa_id", "veiculo_id"], ["veiculos.empresa_id", "veiculos.id"], name="fk_manutencoes_tenant_veiculo"),
+        ForeignKeyConstraint(["empresa_id", "plano_item_id"], ["itens_plano_manutencao.empresa_id", "itens_plano_manutencao.id"], name="fk_manutencoes_tenant_item"),
+        ForeignKeyConstraint(["empresa_id", "custo_id"], ["custos.empresa_id", "custos.id"], name="fk_manutencoes_tenant_custo"),
+    )
     id = Column(Integer, primary_key=True, index=True)
     empresa_id = Column(Integer, ForeignKey("empresas.id"), default=1, nullable=False, index=True)
     veiculo_id = Column(Integer, ForeignKey("veiculos.id"), nullable=False, index=True)
@@ -341,6 +390,10 @@ class ManutencaoRealizada(Base):
 
 class CobrancaRecorrente(Base):
     __tablename__ = "cobrancas_recorrentes"
+    __table_args__ = (
+        UniqueConstraint("empresa_id", "id", name="uq_cobrancas_rec_empresa_id"),
+        ForeignKeyConstraint(["empresa_id", "contrato_id"], ["contratos.empresa_id", "contratos.id"], name="fk_cobrancas_rec_tenant_contrato"),
+    )
     id = Column(Integer, primary_key=True, index=True)
     empresa_id = Column(Integer, ForeignKey("empresas.id"), default=1, nullable=False, index=True)
     contrato_id = Column(Integer, ForeignKey("contratos.id"), nullable=True, index=True)
@@ -361,6 +414,11 @@ class CobrancaRecorrente(Base):
 
 class CobrancaMensal(Base):
     __tablename__ = "cobrancas_mensais"
+    __table_args__ = (
+        UniqueConstraint("empresa_id", "id", name="uq_cobrancas_mensais_empresa_id"),
+        ForeignKeyConstraint(["empresa_id", "contrato_id"], ["contratos.empresa_id", "contratos.id"], name="fk_cobrancas_mensais_tenant_contrato"),
+        ForeignKeyConstraint(["empresa_id", "recorrente_id"], ["cobrancas_recorrentes.empresa_id", "cobrancas_recorrentes.id"], name="fk_cobrancas_mensais_tenant_recorrente"),
+    )
     id = Column(Integer, primary_key=True, index=True)
     empresa_id = Column(Integer, ForeignKey("empresas.id"), default=1, nullable=False, index=True)
     contrato_id = Column(Integer, ForeignKey("contratos.id"), nullable=True, index=True)
@@ -379,11 +437,21 @@ class CobrancaMensal(Base):
     data_recebimento = Column(Date, nullable=True)
     multa = Column(Float, default=2.0)
     juros = Column(Float, default=1.0)
+    valor_principal_liquidado = Column(Numeric(14, 2), nullable=True)
+    multa_aplicada = Column(Numeric(14, 2), nullable=True)
+    juros_aplicados = Column(Numeric(14, 2), nullable=True)
+    dias_atraso_liquidacao = Column(Integer, nullable=True)
+    valor_liquidado = Column(Numeric(14, 2), nullable=True)
+    liquidacao_congelada = Column(Integer, default=0, nullable=False)
+    liquidado_em = Column(DateTime, nullable=True)
     observacoes = Column(String, nullable=True)
 
 
 class Auditoria(Base):
     __tablename__ = "auditoria"
+    __table_args__ = (
+        ForeignKeyConstraint(["empresa_id", "usuario_id"], ["usuarios.empresa_id", "usuarios.id"], name="fk_auditoria_tenant_usuario"),
+    )
     id = Column(Integer, primary_key=True, index=True)
     empresa_id = Column(Integer, ForeignKey("empresas.id"), nullable=True, index=True)
     usuario_id = Column(Integer, ForeignKey("usuarios.id"), nullable=True, index=True)
@@ -398,6 +466,21 @@ Index("ix_custos_empresa_data", Custo.empresa_id, Custo.data_custo)
 Index("ix_cobrancas_empresa_competencia", CobrancaMensal.empresa_id, CobrancaMensal.mes_ano)
 Index("ix_contratos_empresa_veiculo", Contrato.empresa_id, Contrato.veiculo_id)
 Index("ix_motoristas_empresa_ativo", Motorista.empresa_id, Motorista.ativo)
+Index("ix_veiculos_empresa_ativo", Veiculo.empresa_id, Veiculo.ativo)
+Index(
+    "uq_cobrancas_recorrente_competencia",
+    CobrancaMensal.empresa_id, CobrancaMensal.recorrente_id, CobrancaMensal.mes_ano,
+    unique=True,
+    sqlite_where=text("recorrente_id IS NOT NULL"),
+    postgresql_where=text("recorrente_id IS NOT NULL"),
+)
+Index(
+    "uq_cobrancas_contrato_recorrente_competencia",
+    CobrancaMensal.empresa_id, CobrancaMensal.contrato_id, CobrancaMensal.mes_ano, CobrancaMensal.tipo,
+    unique=True,
+    sqlite_where=text("contrato_id IS NOT NULL AND tipo = 'Recorrente'"),
+    postgresql_where=text("contrato_id IS NOT NULL AND tipo = 'Recorrente'"),
+)
 
 
 # ─── MIGRAÇÃO COMPATÍVEL / SOMENTE QUANDO AUTORIZADA ─────────────────────────
@@ -467,6 +550,7 @@ def garantir_colunas_veiculos():
         "combustivel": "VARCHAR",
         "transmissao": "VARCHAR",
         "plano_manutencao_id": "INTEGER",
+        "ativo": "INTEGER DEFAULT 1",
     })
 
 
@@ -498,6 +582,13 @@ def garantir_colunas_cobrancas_mensais():
         "data_envio": "DATE",
         "multa": "FLOAT DEFAULT 2.0",
         "juros": "FLOAT DEFAULT 1.0",
+        "valor_principal_liquidado": "NUMERIC(14,2)",
+        "multa_aplicada": "NUMERIC(14,2)",
+        "juros_aplicados": "NUMERIC(14,2)",
+        "dias_atraso_liquidacao": "INTEGER",
+        "valor_liquidado": "NUMERIC(14,2)",
+        "liquidacao_congelada": "INTEGER DEFAULT 0",
+        "liquidado_em": "TIMESTAMP",
     })
 
 
@@ -541,12 +632,41 @@ def normalizar_dados_legados():
                 rec.juros = 1.0
                 alterou = True
 
+        for veiculo in session.query(Veiculo).all():
+            if veiculo.ativo is None:
+                veiculo.ativo = 1
+                alterou = True
+
         for cob in session.query(CobrancaMensal).all():
             if cob.multa is None:
                 cob.multa = 2.0
                 alterou = True
             if cob.juros is None:
                 cob.juros = 1.0
+                alterou = True
+            if cob.liquidacao_congelada is None:
+                cob.liquidacao_congelada = 0
+                alterou = True
+
+            # V10: congela liquidações legadas já recebidas para que mudanças futuras
+            # de multa/juros não reescrevam o histórico financeiro.
+            if cob.data_recebimento is not None and cob.valor_liquidado is None:
+                principal = Decimal(str(cob.valor_previsto or 0)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+                dias = 0
+                if cob.vencimento is not None:
+                    dias = max((cob.data_recebimento - cob.vencimento).days, 0)
+                pct_multa = Decimal(str(cob.multa or 0))
+                pct_juros = Decimal(str(cob.juros or 0))
+                multa_val = (principal * pct_multa / Decimal("100") if dias > 0 else Decimal("0")).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+                juros_val = (principal * pct_juros / Decimal("100") * Decimal(dias) / Decimal("30") if dias > 0 else Decimal("0")).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+                cob.valor_principal_liquidado = principal
+                cob.multa_aplicada = multa_val
+                cob.juros_aplicados = juros_val
+                cob.dias_atraso_liquidacao = dias
+                cob.valor_liquidado = (principal + multa_val + juros_val).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+                cob.liquidacao_congelada = 1
+                cob.liquidado_em = datetime.utcnow()
+                cob.status = "Recebida"
                 alterou = True
 
         if alterou:
@@ -570,11 +690,16 @@ def validar_schema_gerenciado():
             "ultimo_login", "senha_alterada_em", "privacidade_versao_aceita",
             "privacidade_vista_em",
         },
+        "veiculos": {"ativo"},
         "custos": {"contrato_id", "motorista_id"},
         "cobrancas_recorrentes": {
             "contrato_id", "tipo_valor", "dia_emissao", "dia_vencimento", "multa", "juros", "ativo"
         },
-        "cobrancas_mensais": {"contrato_id", "recorrente_id", "data_envio", "multa", "juros"},
+        "cobrancas_mensais": {
+            "contrato_id", "recorrente_id", "data_envio", "multa", "juros",
+            "valor_principal_liquidado", "multa_aplicada", "juros_aplicados",
+            "dias_atraso_liquidacao", "valor_liquidado", "liquidacao_congelada", "liquidado_em"
+        },
     }
     problemas = []
     for tabela, colunas in requeridas.items():
@@ -589,10 +714,56 @@ def validar_schema_gerenciado():
         problemas.append("tabela ausente: auditoria")
     if "motoristas" not in tabelas:
         problemas.append("tabela ausente: motoristas")
+
+    # V10 também valida tipos financeiros, índices únicos e FKs de isolamento por tenant.
+    for tabela, coluna in [
+        ("contratos", "valor_mensal"),
+        ("custos", "valor_total"),
+        ("cobrancas_mensais", "valor_previsto"),
+        ("cobrancas_mensais", "valor_liquidado"),
+    ]:
+        if tabela in tabelas:
+            tipos = {c["name"]: str(c["type"]).lower() for c in inspector.get_columns(tabela)}
+            tipo = tipos.get(coluna, "")
+            if coluna in tipos and not any(x in tipo for x in ("numeric", "decimal")):
+                problemas.append(f"{tabela}.{coluna}: tipo financeiro deve ser NUMERIC/DECIMAL")
+
+    indices_obrigatorios = {
+        "veiculos": {"uq_veiculos_empresa_placa"},
+        "cobrancas_mensais": {
+            "uq_cobrancas_recorrente_competencia",
+            "uq_cobrancas_contrato_recorrente_competencia",
+        },
+        "motoristas": {
+            "uq_motoristas_empresa_cpf",
+            "uq_motoristas_empresa_cnh",
+            "uq_motoristas_empresa_matricula",
+        },
+    }
+    for tabela, nomes in indices_obrigatorios.items():
+        if tabela in tabelas:
+            existentes_idx = {i.get("name") for i in inspector.get_indexes(tabela)}
+            ausentes = sorted(n for n in nomes if n not in existentes_idx)
+            if ausentes:
+                problemas.append(f"{tabela}: faltam índices/uniques V10: {', '.join(ausentes)}")
+
+    fks_tenant_obrigatorias = {
+        "contratos": {"fk_contratos_tenant_veiculo"},
+        "custos": {"fk_custos_tenant_veiculo", "fk_custos_tenant_contrato", "fk_custos_tenant_motorista"},
+        "cobrancas_recorrentes": {"fk_cobrancas_rec_tenant_contrato"},
+        "cobrancas_mensais": {"fk_cobrancas_mensais_tenant_contrato", "fk_cobrancas_mensais_tenant_recorrente"},
+    }
+    for tabela, nomes in fks_tenant_obrigatorias.items():
+        if tabela in tabelas:
+            existentes_fk = {f.get("name") for f in inspector.get_foreign_keys(tabela)}
+            ausentes = sorted(n for n in nomes if n not in existentes_fk)
+            if ausentes:
+                problemas.append(f"{tabela}: faltam FKs multiempresa V10: {', '.join(ausentes)}")
+
     if problemas:
         raise RuntimeError(
-            "Banco de homologação/produção ainda não foi migrado para a V9 de pessoas e acessos. "
-            "Execute a migração controlada antes do deploy. Detalhes: " + " | ".join(problemas)
+            "Banco de homologação/produção ainda não foi migrado/validado para o hardening V10. "
+            "Execute as migrations V8.1, V9 e V10 na ordem antes do deploy. Detalhes: " + " | ".join(problemas)
         )
 
 
