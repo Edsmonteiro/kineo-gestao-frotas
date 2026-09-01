@@ -33,6 +33,8 @@ except Exception:
 
 logger = logging.getLogger("kineo")
 
+IS_PRODUCTION_APP = str(APP_ENV or "").strip().lower() in {"production", "prod"}
+
 # ─── FUSO HORÁRIO DE EXIBIÇÃO ───────────────────────────────────────────────
 # Datas de auditoria/autenticação continuam armazenadas em UTC no banco.
 # A interface converte para o fuso configurado antes de exibir ao usuário.
@@ -80,6 +82,8 @@ for key, default in [
     ("sessao_expirada_aviso", False),
     ("credencial_temporaria", None),
     ("uploader_key", 0), # Chave para resetar o uploader de planilhas
+    ("recorrencias_editor_version", 0),
+    ("cobrancas_editor_version", 0),
 ]:
     if key not in st.session_state:
         st.session_state[key] = default
@@ -6606,6 +6610,8 @@ else:
 
                                     session.commit()
                                     st.cache_data.clear()
+                                    st.session_state["recorrencias_editor_version"] += 1
+                                    st.session_state["cobrancas_editor_version"] += 1
                                     st.success("Cobrança recorrente cadastrada.")
                                     st.rerun()
                             finally:
@@ -6688,6 +6694,8 @@ else:
                                         rec_db.contrato_id = contrato_db.id
                                         session.commit()
                                         st.cache_data.clear()
+                                        st.session_state["recorrencias_editor_version"] += 1
+                                        st.session_state["cobrancas_editor_version"] += 1
                                         st.success(
                                             "Recorrência vinculada ao contrato."
                                         )
@@ -6759,7 +6767,7 @@ else:
                         df_rec_edit[rec_cols],
                         use_container_width=True,
                         hide_index=True,
-                        key="editor_cobrancas_recorrentes",
+                        key=f"editor_cobrancas_recorrentes_{st.session_state['recorrencias_editor_version']}",
                         column_config={
                             "id": None,
                             "Contrato": st.column_config.TextColumn(
@@ -6841,10 +6849,108 @@ else:
 
                             session.commit()
                             st.cache_data.clear()
+                            st.session_state["recorrencias_editor_version"] += 1
                             st.success("Recorrências atualizadas.")
                             st.rerun()
                         finally:
                             session.close()
+
+                    if st.session_state.get("perfil") == "admin":
+                        with st.expander("Excluir cobrança recorrente — Zona restrita"):
+                            st.caption(
+                                "Exclusão permanente é permitida quando a recorrência não possui histórico. "
+                                "Se houver competências geradas, produção preserva o histórico e exige apenas a desativação. "
+                                "Em DEV/HOMOLOGAÇÃO é possível remover uma recorrência de teste e as competências vinculadas, "
+                                "mediante confirmação explícita."
+                            )
+                            op_rec_excluir = {
+                                (
+                                    f"#{int(r['id'])} · {r['cliente']} · "
+                                    f"{'Ativa' if int(r['ativo'] or 0) == 1 else 'Inativa'}"
+                                ): int(r["id"])
+                                for _, r in df_rec_all.iterrows()
+                            }
+                            rec_exc_label = st.selectbox(
+                                "Recorrência para excluir",
+                                list(op_rec_excluir.keys()),
+                                key="recorrencia_excluir_sel",
+                            )
+                            rec_exc_id = op_rec_excluir[rec_exc_label]
+
+                            session_info = SessionLocal()
+                            try:
+                                qtd_competencias_rec = session_info.query(CobrancaMensal).filter(
+                                    CobrancaMensal.empresa_id == emp_id,
+                                    CobrancaMensal.recorrente_id == rec_exc_id,
+                                ).count()
+                            finally:
+                                session_info.close()
+
+                            if qtd_competencias_rec:
+                                st.warning(
+                                    f"Esta recorrência possui {qtd_competencias_rec} competência(s) gerada(s). "
+                                    + (
+                                        "Em produção ela não pode ser apagada; desative o cadastro para preservar o histórico."
+                                        if IS_PRODUCTION_APP
+                                        else "Como este ambiente não é produção, a exclusão de teste também removerá essas competências."
+                                    ),
+                                    icon=None,
+                                )
+                            else:
+                                st.info("Nenhuma competência mensal está vinculada a esta recorrência.", icon=None)
+
+                            confirm_rec = st.text_input(
+                                f"Digite EXCLUIR {rec_exc_id} para confirmar",
+                                key=f"confirmar_excluir_rec_{rec_exc_id}",
+                            )
+                            if st.button(
+                                "Excluir recorrência permanentemente",
+                                type="primary",
+                                use_container_width=True,
+                                key=f"btn_excluir_rec_{rec_exc_id}",
+                            ):
+                                if confirm_rec.strip() != f"EXCLUIR {rec_exc_id}":
+                                    st.error("Confirmação inválida.", icon=None)
+                                elif IS_PRODUCTION_APP and qtd_competencias_rec > 0:
+                                    st.error(
+                                        "Esta recorrência possui histórico e não pode ser excluída em produção. "
+                                        "Desative-a no campo Ativo.",
+                                        icon=None,
+                                    )
+                                else:
+                                    session = SessionLocal()
+                                    try:
+                                        rec_db = tenant_get(
+                                            session, CobrancaRecorrente, rec_exc_id, emp_id
+                                        )
+                                        if rec_db is None:
+                                            st.error("Recorrência não encontrada.", icon=None)
+                                        else:
+                                            snapshot_cliente = rec_db.cliente
+                                            qtd_excluidas = 0
+                                            if not IS_PRODUCTION_APP:
+                                                qtd_excluidas = session.query(CobrancaMensal).filter(
+                                                    CobrancaMensal.empresa_id == emp_id,
+                                                    CobrancaMensal.recorrente_id == rec_db.id,
+                                                ).delete(synchronize_session=False)
+                                            session.delete(rec_db)
+                                            registrar_auditoria(
+                                                session, emp_id, st.session_state["usuario_id"],
+                                                "COBRANCA_RECORRENTE_EXCLUIDA", "CobrancaRecorrente", rec_exc_id,
+                                                f"Cliente: {snapshot_cliente}; competências removidas: {qtd_excluidas}; ambiente: {APP_ENV}",
+                                            )
+                                            session.commit()
+                                            st.cache_data.clear()
+                                            st.session_state["recorrencias_editor_version"] += 1
+                                            st.session_state["cobrancas_editor_version"] += 1
+                                            st.success("Cobrança recorrente excluída.")
+                                            st.rerun()
+                                    except Exception:
+                                        session.rollback()
+                                        logger.exception("Falha ao excluir cobrança recorrente")
+                                        st.error("Não foi possível excluir a cobrança recorrente.", icon=None)
+                                    finally:
+                                        session.close()
                 else:
                     st.info(
                         "Nenhuma cobrança recorrente cadastrada.",
@@ -7242,7 +7348,7 @@ else:
                             column_config=COL_CONFIG_COB,
                             use_container_width=True,
                             hide_index=True,
-                            key=f"ed_rec_{mes_sel}"
+                            key=f"ed_rec_{mes_sel}_{st.session_state['cobrancas_editor_version']}"
                         )
                         if not df_rec_mes.empty
                         else None
@@ -7279,7 +7385,7 @@ else:
                             column_config=COL_CONFIG_COB,
                             use_container_width=True,
                             hide_index=True,
-                            key=f"ed_pont_{mes_sel}"
+                            key=f"ed_pont_{mes_sel}_{st.session_state['cobrancas_editor_version']}"
                         )
                         if not df_pont_mes.empty
                         else None
@@ -7371,6 +7477,7 @@ else:
                             )
                             session.commit()
                             st.cache_data.clear()
+                            st.session_state["cobrancas_editor_version"] += 1
                             st.success("Competência atualizada. Liquidações recebidas foram congeladas no histórico.")
                             st.rerun()
                         except Exception:
@@ -7502,10 +7609,110 @@ else:
                                 )
                                 session.commit()
                                 st.cache_data.clear()
+                                st.session_state["cobrancas_editor_version"] += 1
                                 st.success("Cobrança pontual adicionada.")
                                 st.rerun()
                             finally:
                                 session.close()
+
+                if st.session_state.get("perfil") == "admin":
+                    with st.expander("Excluir cobrança pontual — Zona restrita"):
+                        df_pont_excluir = carregar_dados_tabela(
+                            """
+                            SELECT id, cliente, mes_ano, valor_previsto, status, data_recebimento,
+                                   liquidacao_congelada, valor_liquidado
+                            FROM cobrancas_mensais
+                            WHERE empresa_id = :empresa_id
+                              AND tipo = 'Pontual'
+                              AND mes_ano = :mes_sel
+                            ORDER BY id DESC
+                            """,
+                            emp_id,
+                            {"mes_sel": mes_sel},
+                        )
+
+                        if df_pont_excluir.empty:
+                            st.info("Nenhuma cobrança pontual nesta competência.", icon=None)
+                        else:
+                            op_pont_excluir = {
+                                (
+                                    f"#{int(r['id'])} · {r['cliente']} · "
+                                    f"{fmt_brl(float(r['valor_liquidado'] if pd.notna(r['valor_liquidado']) else r['valor_previsto'] or 0))} · "
+                                    f"{normalizar_status_cobranca(r['status'])}"
+                                ): int(r["id"])
+                                for _, r in df_pont_excluir.iterrows()
+                            }
+                            pont_exc_label = st.selectbox(
+                                "Cobrança pontual para excluir",
+                                list(op_pont_excluir.keys()),
+                                key=f"pont_excluir_sel_{mes_sel}",
+                            )
+                            pont_exc_id = op_pont_excluir[pont_exc_label]
+                            row_pont = df_pont_excluir[df_pont_excluir["id"] == pont_exc_id].iloc[0]
+                            pont_liquidada = (
+                                int(row_pont.get("liquidacao_congelada") or 0) == 1
+                                or coerce_date(row_pont.get("data_recebimento")) is not None
+                                or normalizar_status_cobranca(row_pont.get("status")) == "Recebida"
+                            )
+
+                            if pont_liquidada:
+                                st.warning(
+                                    (
+                                        "Esta cobrança já possui liquidação. Em produção, histórico financeiro recebido não pode ser apagado."
+                                        if IS_PRODUCTION_APP
+                                        else "Esta cobrança já possui liquidação. Como este ambiente não é produção, ela pode ser removida apenas para limpeza de testes."
+                                    ),
+                                    icon=None,
+                                )
+
+                            confirm_pont = st.text_input(
+                                f"Digite EXCLUIR {pont_exc_id} para confirmar",
+                                key=f"confirmar_excluir_pont_{pont_exc_id}_{mes_sel}",
+                            )
+                            if st.button(
+                                "Excluir cobrança pontual permanentemente",
+                                type="primary",
+                                use_container_width=True,
+                                key=f"btn_excluir_pont_{pont_exc_id}_{mes_sel}",
+                            ):
+                                if confirm_pont.strip() != f"EXCLUIR {pont_exc_id}":
+                                    st.error("Confirmação inválida.", icon=None)
+                                elif IS_PRODUCTION_APP and pont_liquidada:
+                                    st.error(
+                                        "Cobrança liquidada não pode ser excluída em produção. "
+                                        "Use um fluxo de cancelamento/estorno para preservar a rastreabilidade.",
+                                        icon=None,
+                                    )
+                                else:
+                                    session = SessionLocal()
+                                    try:
+                                        cob_db = tenant_get(
+                                            session, CobrancaMensal, pont_exc_id, emp_id
+                                        )
+                                        if cob_db is None or str(cob_db.tipo) != "Pontual":
+                                            st.error("Cobrança pontual não encontrada.", icon=None)
+                                        else:
+                                            snapshot = (
+                                                f"Cliente: {cob_db.cliente}; competência: {cob_db.mes_ano}; "
+                                                f"valor previsto: {cob_db.valor_previsto}; valor liquidado: {cob_db.valor_liquidado}; "
+                                                f"status: {cob_db.status}; ambiente: {APP_ENV}"
+                                            )
+                                            session.delete(cob_db)
+                                            registrar_auditoria(
+                                                session, emp_id, st.session_state["usuario_id"],
+                                                "COBRANCA_PONTUAL_EXCLUIDA", "CobrancaMensal", pont_exc_id, snapshot,
+                                            )
+                                            session.commit()
+                                            st.cache_data.clear()
+                                            st.session_state["cobrancas_editor_version"] += 1
+                                            st.success("Cobrança pontual excluída.")
+                                            st.rerun()
+                                    except Exception:
+                                        session.rollback()
+                                        logger.exception("Falha ao excluir cobrança pontual")
+                                        st.error("Não foi possível excluir a cobrança pontual.", icon=None)
+                                    finally:
+                                        session.close()
 
         # ══════════════════════════════════════════════════════════════════════════
         # CONTRATOS E LOCAÇÃO
