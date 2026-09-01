@@ -5,3 +5,6 @@ sqlalchemy
 bcrypt
 psycopg2-binary
 openpyxl
+# Dependência nova da V8 de segurança.
+# Adicione esta linha ao requirements.txt do Kineo antes do deploy:
+argon2-cffi>=25.1.0,<26
