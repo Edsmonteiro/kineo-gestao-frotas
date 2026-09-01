@@ -14,4 +14,8 @@ logos/
 # Cache do Python e Streamlit
 __pycache__/
 *.pyc
+# Secrets e variáveis de ambiente
 .streamlit/secrets.toml
+**/.streamlit/secrets.toml
+.env
+.env.*
