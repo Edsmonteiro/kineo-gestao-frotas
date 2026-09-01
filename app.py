@@ -82,6 +82,7 @@ for key, default in [
     ("sessao_expirada_aviso", False),
     ("credencial_temporaria", None),
     ("uploader_key", 0), # Chave para resetar o uploader de planilhas
+    ("custos_uploader_version", 0), # Chave para limpar o comprovante após registrar despesa
     ("recorrencias_editor_version", 0),
     ("cobrancas_editor_version", 0),
 ]:
@@ -4956,7 +4957,7 @@ else:
                             "Anexar imagem ou PDF",
                             type=["png", "jpg", "jpeg", "pdf"],
                             label_visibility="collapsed",
-                            key="custos_comprovante"
+                            key=f"custos_comprovante_{st.session_state['custos_uploader_version']}"
                         )
 
                         acao_col1, acao_col2 = st.columns([4, 1.2])
@@ -5142,6 +5143,11 @@ else:
                                         f"Categoria: {cat}; veículo: {veiculo_db.id}",
                                     )
                                     session.commit()
+
+                                    # Limpa o file_uploader do comprovante após o registro.
+                                    # Uma nova chave força o Streamlit a recriar o widget vazio.
+                                    st.session_state["custos_uploader_version"] += 1
+
                                     st.cache_data.clear()
                                     st.success(
                                         "Despesa registrada com sucesso."
