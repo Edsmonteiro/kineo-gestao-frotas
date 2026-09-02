@@ -2102,10 +2102,17 @@ def aplicar_css_dashboard_v11():
     st.markdown(
         """
 <style>
-.block-container:has(.kineo-dashboard-v11) {
-    max-width: 1600px;
-    padding-top: .65rem;
-    padding-bottom: 2rem;
+/* Streamlit varia o nome do container principal entre versões.
+   Todos os seletores abaixo mantêm o dashboard junto ao topo da viewport. */
+.block-container:has(.kineo-dashboard-v11),
+[data-testid="stMainBlockContainer"]:has(.kineo-dashboard-v11),
+[data-testid="stMain"] .block-container:has(.kineo-dashboard-v11),
+section.main .block-container:has(.kineo-dashboard-v11) {
+    width: 100% !important;
+    max-width: 1600px !important;
+    margin-top: 0 !important;
+    padding-top: .5rem !important;
+    padding-bottom: 2rem !important;
 }
 
 .kineo-dashboard-hero {
