@@ -6382,24 +6382,33 @@ else:
                                 st.info("O ranking aparecerá após o primeiro lançamento.", icon=None)
                             else:
                                 ranking_custos = (
-                                    df_custos_resumo.groupby("categoria")["valor_total"]
-                                    .sum().sort_values(ascending=False).head(8)
+                                    df_custos_resumo.groupby("categoria", as_index=False)["valor_total"]
+                                    .sum()
+                                    .sort_values("valor_total", ascending=False)
+                                    .head(8)
                                 )
                                 fig_ranking_custos = px.bar(
-                            ranking_custos,
-                            x="Categoria",
-                            y="Valor",
-                            labels={"Categoria": "Categoria", "Valor": "Valor (R$)"},
-                        )
-                        fig_ranking_custos.update_layout(
-                            **PLOTLY_LAYOUT,
-                            margin=dict(l=10, r=10, t=20, b=10),
-                        )
-                        st.plotly_chart(
-                            fig_ranking_custos,
-                            use_container_width=True,
-                            config={"displayModeBar": False, "scrollZoom": False, "staticPlot": True},
-                        )
+                                    ranking_custos,
+                                    x="categoria",
+                                    y="valor_total",
+                                    labels={
+                                        "categoria": "Categoria",
+                                        "valor_total": "Valor (R$)",
+                                    },
+                                )
+                                fig_ranking_custos.update_layout(
+                                    **PLOTLY_LAYOUT,
+                                    margin=dict(l=10, r=10, t=20, b=10),
+                                )
+                                st.plotly_chart(
+                                    fig_ranking_custos,
+                                    use_container_width=True,
+                                    config={
+                                        "displayModeBar": False,
+                                        "scrollZoom": False,
+                                        "staticPlot": True,
+                                    },
+                                )
 
                 # ──────────────────────────────────────────────────────────────
                 # REGISTRAR DESPESA
@@ -8208,7 +8217,7 @@ else:
                     key=f"cob_rec_contrato_{recorrencia_form_version}"
                 )
                 contrato_id_rec = opcoes_contratos[contrato_label]
-                recorrencia_form_key = f"{recorrencia_form_key}_{recorrencia_form_version}"
+                recorrencia_form_key = f"{contrato_id_rec or 'manual'}_{recorrencia_form_version}"
 
                 contrato_base = None
                 if contrato_id_rec is not None and not ativos_fin.empty:
