@@ -702,16 +702,16 @@ css_template = f"""
 
 /* Tabelas de consulta: não permitem ordenar, ocultar, redimensionar ou fixar colunas. */
 [data-testid="stDataFrame"] button,
-[data-testid="stDataFrame"] [role="button"] {
+[data-testid="stDataFrame"] [role="button"] {{
     display: none !important;
     pointer-events: none !important;
-}
+}}
 
 /* Gráficos são exibidos como painéis somente leitura. */
 .js-plotly-plot .modebar,
-.js-plotly-plot .plotly-notifier {
+.js-plotly-plot .plotly-notifier {{
     display: none !important;
-}
+}}
 
 /* ── Reset & Base ── */
 html, body, [class*="css"] {{
