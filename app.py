@@ -25,7 +25,7 @@ from sqlalchemy import text as sql_text
 from sqlalchemy.exc import IntegrityError
 from zoneinfo import ZoneInfo
 from decimal import Decimal, ROUND_HALF_UP, ROUND_DOWN
-from kineo_core import email_valido, normalizar_email
+from kineo_core import email_valido, normalizar_email, parse_valor_monetario_br
 
 try:
     import boto3
@@ -1579,52 +1579,8 @@ def salvar_imagem_segura(uploaded_file, chave_png, max_mb=5):
 
 
 def parse_valor_cobranca(valor):
-    """Converte valores monetários BR/US para float; 'Variável' retorna 0.
-
-    Exemplos aceitos:
-    52800        -> 52800.00
-    52.800       -> 52800.00
-    52.800,00    -> 52800.00
-    52800.00     -> 52800.00
-    R$ 52.800,00 -> 52800.00
-    """
-    if valor is None:
-        return 0.0
-    if isinstance(valor, (int, float)):
-        return float(valor)
-
-    texto = str(valor).strip()
-    if not texto or "vari" in texto.lower():
-        return 0.0
-
-    try:
-        texto = texto.replace("R$", "").replace(" ", "")
-
-        # Formato brasileiro completo: 52.800,00
-        if "," in texto:
-            texto = texto.replace(".", "").replace(",", ".")
-
-        # Sem vírgula: distingue ponto de milhar de ponto decimal.
-        elif "." in texto:
-            partes = texto.split(".")
-
-            # 52.800 ou 1.250.000 -> pontos são separadores de milhar.
-            if (
-                len(partes) > 2
-                or (
-                    len(partes) == 2
-                    and len(partes[1]) == 3
-                    and partes[0].replace("-", "").isdigit()
-                    and partes[1].isdigit()
-                )
-            ):
-                texto = "".join(partes)
-            # 52800.00 / 52.80 permanecem como decimal internacional.
-
-        return float(texto)
-    except Exception:
-        return 0.0
-
+    """Compatibilidade para valores monetários exibidos na aplicação."""
+    return parse_valor_monetario_br(valor)
 
 def decimal_monetario(valor):
     """Normaliza um valor monetário para Decimal(2), sem aritmética financeira em float."""
@@ -6429,12 +6385,28 @@ else:
                                     df_custos_resumo.groupby("categoria")["valor_total"]
                                     .sum().sort_values(ascending=False).head(8)
                                 )
-                                st.bar_chart(ranking_custos)
+                                fig_ranking_custos = px.bar(
+                            ranking_custos,
+                            x="Categoria",
+                            y="Valor",
+                            labels={"Categoria": "Categoria", "Valor": "Valor (R$)"},
+                        )
+                        fig_ranking_custos.update_layout(
+                            **PLOTLY_LAYOUT,
+                            margin=dict(l=10, r=10, t=20, b=10),
+                        )
+                        st.plotly_chart(
+                            fig_ranking_custos,
+                            use_container_width=True,
+                            config={"displayModeBar": False, "scrollZoom": False, "staticPlot": True},
+                        )
 
                 # ──────────────────────────────────────────────────────────────
                 # REGISTRAR DESPESA
                 # ──────────────────────────────────────────────────────────────
                 with tab_lancar:
+                    # Uma nova versão de chave recria os widgets limpos após salvar.
+                    custos_form_version = st.session_state.setdefault("custos_form_version", 0)
                     with st.container(border=True):
                         st.markdown("### Nova despesa")
                         st.caption(
@@ -6447,19 +6419,19 @@ else:
                         cat = c1.selectbox(
                             "Categoria",
                             CATEGORIAS,
-                            key="custos_categoria"
+                            key=f"custos_categoria_{custos_form_version}"
                         )
 
                         veiculo_sel = c2.selectbox(
                             "Veículo",
                             list(opcoes_v.keys()),
-                            key="custos_veiculo"
+                            key=f"custos_veiculo_{custos_form_version}"
                         )
 
                         data_custo = c3.date_input(
                             "Data",
                             format="DD/MM/YYYY",
-                            key="custos_data"
+                            key=f"custos_data_{custos_form_version}"
                         )
 
                         veiculo_id_sel = opcoes_v[veiculo_sel]
@@ -6502,20 +6474,22 @@ else:
 
                         d1, d2, d3 = st.columns([1, 1, 1])
 
-                        valor = d1.number_input(
+                        valor_texto = d1.text_input(
                             "Valor total (R$)",
-                            min_value=0.01,
-                            step=10.0,
-                            value=0.01,
-                            key="custos_valor"
+                            placeholder="Ex.: 1.012,08",
+                            key=f"custos_valor_{custos_form_version}"
                         )
+                        valor_total_decimal = decimal_monetario(valor_texto)
+                        valor = float(valor_total_decimal)
+                        if str(valor_texto or "").strip() and valor_total_decimal > 0:
+                            d1.caption(f"Valor reconhecido: **{fmt_brl(valor_total_decimal)}**")
 
                         km_atual = d2.number_input(
                             "KM no momento",
                             min_value=0.0,
                             step=50.0,
                             value=km_cadastrado,
-                            key=f"custos_km_{veiculo_id_sel}"
+                            key=f"custos_km_{custos_form_version}_{veiculo_id_sel}"
                         )
 
                         if float(km_atual or 0) > 0 and float(km_atual or 0) < km_cadastrado:
@@ -6532,7 +6506,7 @@ else:
                                 min_value=0.1,
                                 step=1.0,
                                 value=0.1,
-                                key="custos_litros"
+                                key=f"custos_litros_{custos_form_version}"
                             )
 
                             if litros > 0:
@@ -6578,7 +6552,7 @@ else:
                                 manut_label = st.selectbox(
                                     "Tipo de manutenção",
                                     opcoes_labels,
-                                    key="custos_tipo_manutencao"
+                                    key=f"custos_tipo_manutencao_{custos_form_version}"
                                 )
                                 if manut_label != "Outro / não vinculado ao plano":
                                     tipo_manutencao = manut_label
@@ -6591,7 +6565,7 @@ else:
                                 tipo_manutencao = st.text_input(
                                     "Tipo de manutenção",
                                     placeholder="Ex.: Troca de óleo do motor",
-                                    key="custos_tipo_manutencao_livre"
+                                    key=f"custos_tipo_manutencao_livre_{custos_form_version}"
                                 )
                                 st.warning(
                                     "Este veículo ainda não possui plano vinculado. O custo será registrado, mas não reiniciará automaticamente um ciclo preventivo.",
@@ -6604,7 +6578,7 @@ else:
                                 "Ex.: abastecimento, troca de óleo, documentação, "
                                 "serviço realizado..."
                             ),
-                            key="custos_descricao"
+                            key=f"custos_descricao_{custos_form_version}"
                         )
 
                         st.markdown("---")
@@ -6614,7 +6588,7 @@ else:
                         forma_pag = p1.selectbox(
                             "Forma de pagamento",
                             FORMAS_PAGAMENTO,
-                            key="custos_forma_pagamento"
+                            key=f"custos_forma_pagamento_{custos_form_version}"
                         )
 
                         df_motoristas_custo = carregar_dados_tabela(
@@ -6643,7 +6617,7 @@ else:
                         motorista_label = p2.selectbox(
                             "Motorista relacionado",
                             list(opcoes_motorista_custo.keys()),
-                            key="custos_motorista"
+                            key=f"custos_motorista_{custos_form_version}"
                         )
                         motorista_id = opcoes_motorista_custo[motorista_label]
                         motorista = nomes_motorista_custo.get(motorista_id) if motorista_id else None
@@ -6660,7 +6634,7 @@ else:
                                 "Condição",
                                 ["À vista", "Parcelado"],
                                 horizontal=True,
-                                key="custos_condicao_pagamento"
+                                key=f"custos_condicao_pagamento_{custos_form_version}"
                             )
 
                             if condicao_pag == "Parcelado":
@@ -6670,7 +6644,7 @@ else:
                                     max_value=48,
                                     step=1,
                                     value=2,
-                                    key="custos_parcelas"
+                                    key=f"custos_parcelas_{custos_form_version}"
                                 )
 
                         st.markdown("**Comprovante**")
@@ -6688,8 +6662,18 @@ else:
                                 "Registrar despesa",
                                 icon=":material/add_card:",
                                 use_container_width=True,
-                                key="btn_registrar_custo"
+                                key=f"btn_registrar_custo_{custos_form_version}"
                             )
+
+                        if salvar_custo and (
+                            not str(valor_texto or "").strip()
+                            or valor_total_decimal <= 0
+                        ):
+                            st.error(
+                                "Informe um valor total válido, como 1.012,08.",
+                                icon=None,
+                            )
+                            salvar_custo = False
 
                         if salvar_custo:
                             km_val = float(km_atual or 0.0)
@@ -6724,7 +6708,6 @@ else:
                                         )
 
                                     custo_manutencao_base_id = None
-                                    valor_total_decimal = decimal_monetario(valor)
 
                                     if (
                                         forma_pag == "Cartão de Crédito"
@@ -6868,6 +6851,7 @@ else:
                                     # Limpa o file_uploader do comprovante após o registro.
                                     # Uma nova chave força o Streamlit a recriar o widget vazio.
                                     st.session_state["custos_uploader_version"] += 1
+                                    st.session_state["custos_form_version"] += 1
 
                                     st.cache_data.clear()
                                     st.success(
@@ -8186,9 +8170,32 @@ else:
                     df_contratos_fin[df_contratos_fin["ativo"] == 1].copy()
                     if not df_contratos_fin.empty else pd.DataFrame()
                 )
+                # Um contrato com recorrência ativa já possui regra de faturamento.
+                # Ele não pode ser escolhido novamente nesta criação.
+                df_contratos_recorrentes = carregar_dados_tabela(
+                    """
+                    SELECT DISTINCT contrato_id
+                    FROM cobrancas_recorrentes
+                    WHERE empresa_id = :empresa_id
+                      AND contrato_id IS NOT NULL
+                      AND COALESCE(ativo, 1) = 1
+                    """,
+                    emp_id,
+                )
+                contratos_com_recorrencia = set(
+                    df_contratos_recorrentes["contrato_id"].dropna().astype(int).tolist()
+                ) if not df_contratos_recorrentes.empty else set()
+                contratos_disponiveis_rec = (
+                    ativos_fin[~ativos_fin["id"].astype(int).isin(contratos_com_recorrencia)].copy()
+                    if not ativos_fin.empty else ativos_fin
+                )
+
+                recorrencia_form_version = st.session_state.setdefault(
+                    "recorrencia_form_version", 0
+                )
                 opcoes_contratos = {"Cadastro manual / sem vínculo": None}
-                if not ativos_fin.empty:
-                    for _, row in ativos_fin.iterrows():
+                if not contratos_disponiveis_rec.empty:
+                    for _, row in contratos_disponiveis_rec.iterrows():
                         label = (
                             f"#{int(row['id'])} · {row['cliente']} · "
                             f"{row['modelo']} {row['placa']}"
@@ -8198,9 +8205,10 @@ else:
                 contrato_label = st.selectbox(
                     "Contrato vinculado",
                     list(opcoes_contratos.keys()),
-                    key="cob_rec_contrato"
+                    key=f"cob_rec_contrato_{recorrencia_form_version}"
                 )
                 contrato_id_rec = opcoes_contratos[contrato_label]
+                recorrencia_form_key = f"{recorrencia_form_key}_{recorrencia_form_version}"
 
                 contrato_base = None
                 if contrato_id_rec is not None and not ativos_fin.empty:
@@ -8215,18 +8223,18 @@ else:
                             "Cliente",
                             value=str(contrato_base["cliente"]),
                             disabled=True,
-                            key=f"cob_rec_cliente_{contrato_id_rec}"
+                            key=f"cob_rec_cliente_{recorrencia_form_key}"
                         )
                     else:
                         c_cli = r1.text_input(
                             "Cliente",
-                            key="cob_rec_cliente_manual"
+                            key=f"cob_rec_cliente_manual_{recorrencia_form_version}"
                         )
 
                     c_form = r2.selectbox(
                         "Forma de cobrança",
                         FORMAS_COBRANCA,
-                        key=f"cob_rec_forma_{contrato_id_rec or 'manual'}"
+                        key=f"cob_rec_forma_{recorrencia_form_key}"
                     )
 
                     default_tipo = (
@@ -8242,7 +8250,7 @@ else:
                         "Tipo do valor",
                         ["Fixo", "Variável"],
                         index=0 if default_tipo == "Fixo" else 1,
-                        key=f"cob_rec_tipo_{contrato_id_rec or 'manual'}"
+                        key=f"cob_rec_tipo_{recorrencia_form_key}"
                     )
 
                     valor_padrao = (
@@ -8254,7 +8262,7 @@ else:
                         value=(fmt_brl(valor_padrao).replace("R$ ", "") if valor_padrao else ""),
                         placeholder="Ex.: 52.800,00",
                         disabled=(c_tipo == "Variável"),
-                        key=f"cob_rec_valor_{contrato_id_rec or 'manual'}"
+                        key=f"cob_rec_valor_{recorrencia_form_key}"
                     )
                     c_val_num = parse_valor_cobranca(c_val_txt) if c_tipo == "Fixo" else 0.0
                     c_de = r5.number_input(
@@ -8263,7 +8271,7 @@ else:
                         max_value=31,
                         value=1,
                         step=1,
-                        key=f"cob_rec_emissao_{contrato_id_rec or 'manual'}"
+                        key=f"cob_rec_emissao_{recorrencia_form_key}"
                     )
                     c_dv = r6.number_input(
                         "Dia de vencimento",
@@ -8271,7 +8279,7 @@ else:
                         max_value=31,
                         value=10,
                         step=1,
-                        key=f"cob_rec_venc_{contrato_id_rec or 'manual'}"
+                        key=f"cob_rec_venc_{recorrencia_form_key}"
                     )
 
                     r7, r8 = st.columns(2)
@@ -8288,14 +8296,14 @@ else:
                         min_value=0.0,
                         step=0.1,
                         value=multa_padrao,
-                        key=f"cob_rec_multa_{contrato_id_rec or 'manual'}"
+                        key=f"cob_rec_multa_{recorrencia_form_key}"
                     )
                     c_juros = r8.number_input(
                         "Juros (%)",
                         min_value=0.0,
                         step=0.1,
                         value=juros_padrao,
-                        key=f"cob_rec_juros_{contrato_id_rec or 'manual'}"
+                        key=f"cob_rec_juros_{recorrencia_form_key}"
                     )
 
                     c_obs = st.text_area(
@@ -8304,14 +8312,14 @@ else:
                             "Ex.: enviar e-mail após aprovação, contatos responsáveis, "
                             "regras específicas do cliente..."
                         ),
-                        key=f"cob_rec_obs_{contrato_id_rec or 'manual'}"
+                        key=f"cob_rec_obs_{recorrencia_form_key}"
                     )
 
                     if st.button(
                         "Salvar cobrança recorrente",
                         icon=":material/save:",
                         use_container_width=True,
-                        key="btn_salvar_cobranca_recorrente"
+                        key=f"btn_salvar_cobranca_recorrente_{recorrencia_form_version}"
                     ):
                         cliente_limpo = str(c_cli or "").strip()
                         if not cliente_limpo:
@@ -8390,6 +8398,7 @@ else:
 
                                     session.commit()
                                     st.cache_data.clear()
+                                    st.session_state["recorrencia_form_version"] += 1
                                     st.session_state["recorrencias_editor_version"] += 1
                                     st.session_state["cobrancas_editor_version"] += 1
                                     st.success("Cobrança recorrente cadastrada.")
