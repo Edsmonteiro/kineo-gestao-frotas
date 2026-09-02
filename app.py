@@ -4912,165 +4912,101 @@ else:
 
             # ── Visão analítica principal ─────────────────────────────────────────
             st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
-            col_fin, col_frota = st.columns([1.55, 1])
 
-            with col_fin:
-                with st.container(border=True):
-                    st.markdown("### Evolução Financeira")
-                    st.caption("Faturamento e despesas nos últimos meses.")
+            with st.container(border=True):
+                st.markdown("### Evolução Financeira")
+                st.caption("Faturamento e despesas nos últimos meses.")
 
-                    if not df_custos.empty or not df_cobrancas.empty:
-                        frames_fluxo = []
+                if not df_custos.empty or not df_cobrancas.empty:
+                    frames_fluxo = []
 
-                        if not df_custos.empty:
-                            dc = (
-                                df_custos.groupby("mes_ano")["valor_total"]
-                                .sum()
-                                .reset_index()
-                            )
-                            dc.columns = ["mes_ano", "valor"]
-                            dc["tipo"] = "Despesas"
-                            frames_fluxo.append(dc)
-
-                        if not df_cobrancas.empty:
-                            df_cobrancas_graf = df_cobrancas[
-                                ~df_cobrancas["status"].isin(["Cancelada", "Não cobrar"])
-                            ].copy()
-                            dr = (
-                                df_cobrancas_graf.groupby("mes_ano")["_valor_dashboard"]
-                                .sum()
-                                .reset_index()
-                            )
-                            dr.columns = ["mes_ano", "valor"]
-                            dr["tipo"] = "Faturamento"
-                            frames_fluxo.append(dr)
-
-                        df_fluxo = pd.concat(frames_fluxo, ignore_index=True)
-                        df_fluxo["data_ordem"] = pd.to_datetime(
-                            df_fluxo["mes_ano"], format="%m/%Y", errors="coerce"
+                    if not df_custos.empty:
+                        dc = (
+                            df_custos.groupby("mes_ano")["valor_total"]
+                            .sum()
+                            .reset_index()
                         )
-                        df_fluxo = (
-                            df_fluxo.dropna(subset=["data_ordem"])
-                            .sort_values("data_ordem")
+                        dc.columns = ["mes_ano", "valor"]
+                        dc["tipo"] = "Despesas"
+                        frames_fluxo.append(dc)
+
+                    if not df_cobrancas.empty:
+                        df_cobrancas_graf = df_cobrancas[
+                            ~df_cobrancas["status"].isin(["Cancelada", "Não cobrar"])
+                        ].copy()
+                        dr = (
+                            df_cobrancas_graf.groupby("mes_ano")["_valor_dashboard"]
+                            .sum()
+                            .reset_index()
                         )
+                        dr.columns = ["mes_ano", "valor"]
+                        dr["tipo"] = "Faturamento"
+                        frames_fluxo.append(dr)
 
-                        if not df_fluxo.empty:
-                            meses = df_fluxo["mes_ano"].drop_duplicates().tolist()[-12:]
-                            df_fluxo = df_fluxo[df_fluxo["mes_ano"].isin(meses)]
+                    df_fluxo = pd.concat(frames_fluxo, ignore_index=True)
+                    df_fluxo["data_ordem"] = pd.to_datetime(
+                        df_fluxo["mes_ano"], format="%m/%Y", errors="coerce"
+                    )
+                    df_fluxo = (
+                        df_fluxo.dropna(subset=["data_ordem"])
+                        .sort_values("data_ordem")
+                    )
 
-                            fig_fluxo = px.bar(
-                                df_fluxo,
-                                x="mes_ano",
-                                y="valor",
-                                color="tipo",
-                                barmode="group",
-                                color_discrete_map={
-                                    "Faturamento": "#1768E5",
-                                    "Despesas": "#8CA3C2",
-                                },
-                            )
-                            fig_fluxo.update_traces(
-                                hovertemplate="<b>%{x}</b><br>R$ %{y:,.2f}<extra></extra>",
-                                marker_line_width=0,
-                            )
-                            fig_fluxo.update_layout(
-                                **{
-                                    **PLOTLY_LAYOUT,
-                                    "margin": dict(l=10, r=10, t=35, b=10),
-                                },
-                                height=310,
-                                bargap=0.28,
-                                xaxis=dict(title="", type="category", showgrid=False),
-                                yaxis=dict(
-                                    title="",
-                                    tickprefix="R$ ",
-                                    gridcolor="#EDF2F7",
-                                    zeroline=False,
-                                ),
-                                legend=dict(
-                                    title="",
-                                    orientation="h",
-                                    y=1.10,
-                                    x=0,
-                                ),
-                            )
-                            st.plotly_chart(
-                                fig_fluxo,
-                                use_container_width=True,
-                                config={"displayModeBar": False},
-                            )
-                        else:
-                            st.info("Ainda não há histórico mensal suficiente.", icon=None)
-                    else:
-                        vf1, vf2 = st.columns(2)
-                        vf1.metric("Receita no mês", fmt_brl(faturamento_mes_atual))
-                        vf2.metric("Despesa no mês", fmt_brl(custos_mes_atual))
-                        st.info(
-                            "Cadastre despesas ou cobranças para habilitar a evolução financeira.",
-                            icon=None,
-                        )
+                    if not df_fluxo.empty:
+                        meses = df_fluxo["mes_ano"].drop_duplicates().tolist()[-12:]
+                        df_fluxo = df_fluxo[df_fluxo["mes_ano"].isin(meses)]
 
-            with col_frota:
-                with st.container(border=True):
-                    st.markdown("### Disponibilidade da Frota")
-                    st.caption("Distribuição atual dos veículos por status.")
-
-                    if veiculos_totais > 0:
-                        df_pizza = pd.DataFrame({
-                            "Status": ["Disponível", "Alugado", "Manutenção"],
-                            "Quantidade": [
-                                veiculos_disponiveis,
-                                veiculos_alugados,
-                                veiculos_manutencao,
-                            ],
-                        })
-                        df_pizza = df_pizza[df_pizza["Quantidade"] > 0]
-
-                        fig_frota = px.pie(
-                            df_pizza,
-                            names="Status",
-                            values="Quantidade",
-                            hole=0.72,
-                            color="Status",
+                        fig_fluxo = px.bar(
+                            df_fluxo,
+                            x="mes_ano",
+                            y="valor",
+                            color="tipo",
+                            barmode="group",
                             color_discrete_map={
-                                "Disponível": "#17A673",
-                                "Alugado": "#1768E5",
-                                "Manutenção": "#F0A833",
+                                "Faturamento": "#1768E5",
+                                "Despesas": "#8CA3C2",
                             },
                         )
-                        fig_frota.update_traces(
-                            textposition="none",
-                            hovertemplate="<b>%{label}</b><br>%{value} veículo(s)<extra></extra>",
+                        fig_fluxo.update_traces(
+                            hovertemplate="<b>%{x}</b><br>R$ %{y:,.2f}<extra></extra>",
+                            marker_line_width=0,
                         )
-                        fig_frota.add_annotation(
-                            text=f"<b>{veiculos_totais}</b><br><span style='font-size:11px'>veículos</span>",
-                            x=0.5,
-                            y=0.5,
-                            showarrow=False,
-                            font=dict(size=20, color="#153A66"),
-                        )
-                        fig_frota.update_layout(
+                        fig_fluxo.update_layout(
                             **{
                                 **PLOTLY_LAYOUT,
-                                "margin": dict(l=5, r=5, t=5, b=20),
+                                "margin": dict(l=10, r=10, t=35, b=10),
                             },
-                            height=242,
-                            showlegend=True,
+                            height=310,
+                            bargap=0.28,
+                            xaxis=dict(title="", type="category", showgrid=False),
+                            yaxis=dict(
+                                title="",
+                                tickprefix="R$ ",
+                                gridcolor="#EDF2F7",
+                                zeroline=False,
+                            ),
                             legend=dict(
                                 title="",
                                 orientation="h",
-                                y=-0.08,
-                                x=0.5,
-                                xanchor="center",
+                                y=1.10,
+                                x=0,
                             ),
                         )
                         st.plotly_chart(
-                            fig_frota,
+                            fig_fluxo,
                             use_container_width=True,
                             config={"displayModeBar": False},
                         )
                     else:
-                        st.info("Nenhum veículo cadastrado.", icon=None)
+                        st.info("Ainda não há histórico mensal suficiente.", icon=None)
+                else:
+                    vf1, vf2 = st.columns(2)
+                    vf1.metric("Receita no mês", fmt_brl(faturamento_mes_atual))
+                    vf2.metric("Despesa no mês", fmt_brl(custos_mes_atual))
+                    st.info(
+                        "Cadastre despesas ou cobranças para habilitar a evolução financeira.",
+                        icon=None,
+                    )
 
             # ── Contratos e saúde da frota ────────────────────────────────────────
             st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
