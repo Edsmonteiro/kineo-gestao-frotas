@@ -25,6 +25,7 @@ from sqlalchemy import text as sql_text
 from sqlalchemy.exc import IntegrityError
 from zoneinfo import ZoneInfo
 from decimal import Decimal, ROUND_HALF_UP, ROUND_DOWN
+from kineo_core import email_valido, normalizar_email
 
 try:
     import boto3
@@ -77,19 +78,6 @@ def formatar_serie_datetime_local(serie, formato="%d/%m/%Y %H:%M"):
 
 # ─── IDENTIDADE / LOGIN V10.3 ────────────────────────────────────────────────
 LOGIN_REMEMBER_STORAGE_KEY = "kineo_login_identifier_v1"
-EMAIL_PATTERN = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
-
-
-def normalizar_email(valor):
-    """Normaliza e-mail para busca/armazenamento sem alterar usuários legados sem e-mail."""
-    return str(valor or "").strip().lower()
-
-
-def email_valido(valor):
-    email = normalizar_email(valor)
-    return bool(email and len(email) <= 254 and EMAIL_PATTERN.fullmatch(email))
-
-
 def ler_identificador_lembrado():
     """Lê somente o identificador salvo no localStorage. Nunca armazena senha/token/sessão."""
     if not STREAMLIT_JS_EVAL_DISPONIVEL:
