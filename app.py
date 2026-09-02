@@ -179,6 +179,12 @@ def aplicar_css_login():
 [data-testid="stSidebar"] { display: none !important; }
 [data-testid="collapsedControl"] { display: none !important; }
 header[data-testid="stHeader"] { display: none !important; }
+[data-testid="stDecoration"],
+[data-testid="stStatusWidget"] { display: none !important; }
+
+[data-testid="stMain"] {
+    min-height: 100dvh !important;
+}
 
 [data-testid="stAppViewContainer"] {
     background: linear-gradient(135deg, #E9F1FC 0%, #F7FAFF 55%, #E7F0FC 100%) !important;
@@ -4004,14 +4010,17 @@ if not st.session_state["autenticado"]:
 
     # O componente de localStorage retorna de forma assíncrona e pode provocar um rerun.
     # Apenas o identificador é lembrado; senha, tenant e tokens nunca são persistidos aqui.
-    if not st.session_state.get("login_remember_loaded", False):
-        lembrado = ler_identificador_lembrado()
-        if STREAMLIT_JS_EVAL_DISPONIVEL:
-            # Quando o componente já retornou (inclusive string vazia), marca como carregado.
-            # Na primeira renderização ele pode retornar None e então o próprio componente reroda.
-            if lembrado is not None:
-                st.session_state["login_identifier_prefill"] = lembrado
-                st.session_state["login_remember_loaded"] = True
+    # Mantém o componente na mesma posição da árvore visual em todos os reruns.
+    # Removê-lo depois da primeira leitura deslocava os elementos do formulário e
+    # fazia o Streamlit exibir temporariamente duas cópias da tela no submit.
+    lembrado = ler_identificador_lembrado()
+    if (
+        not st.session_state.get("login_remember_loaded", False)
+        and STREAMLIT_JS_EVAL_DISPONIVEL
+        and lembrado is not None
+    ):
+        st.session_state["login_identifier_prefill"] = lembrado
+        st.session_state["login_remember_loaded"] = True
 
     col_visual, col_login = st.columns([1.08, 0.92])
 
@@ -4073,113 +4082,114 @@ if not st.session_state["autenticado"]:
             )
 
         if submitted:
-            login_digitado = str(usuario_input or "").strip()
-            login_email = normalizar_email(login_digitado)
-            agora = agora_utc()
-            session = SessionLocal()
-            try:
-                # Identidade global nesta fase: usuário OU e-mail único.
-                # O empresa_id é obtido exclusivamente do registro autenticado.
-                user = session.query(Usuario).filter(
-                    (Usuario.login == login_digitado) |
-                    (Usuario.email == login_email)
-                ).first()
-
-                if user and user.bloqueado_ate and user.bloqueado_ate > agora:
-                    segundos = int((user.bloqueado_ate - agora).total_seconds())
-                    st.error(
-                        f"Acesso temporariamente bloqueado. Tente novamente em aproximadamente {max(segundos, 1)}s."
-                    )
-                else:
-                    if user and user.bloqueado_ate and user.bloqueado_ate <= agora:
-                        user.bloqueado_ate = None
-                        user.tentativas_login = 0
-
-                    autenticado_ok = (
-                        user is not None
-                        and int(user.ativo or 0) == 1
-                        and verify_password(senha_input, user.senha)
-                    )
-
-                    if autenticado_ok:
-                        user.tentativas_login = 0
-                        user.bloqueado_ate = None
-                        user.ultimo_login = agora
-
-                        # Compatibilidade com contas antigas criadas antes da V8.
-                        if verify_password("PRIMEIROACESSO", user.senha):
-                            user.must_change_password = 1
-
-                        # Migração transparente: bcrypt legado -> Argon2id.
-                        if password_needs_rehash(user.senha):
-                            user.senha = hash_password(senha_input)
-
-                        registrar_auditoria(
-                            session,
-                            user.empresa_id,
-                            user.id,
-                            "LOGIN_SUCESSO",
-                            "Usuario",
-                            user.id,
-                            f"Ambiente: {APP_ENV}; método: {'email' if login_email and user.email == login_email else 'usuario'}",
+            with st.spinner("Validando seu acesso..."):
+                login_digitado = str(usuario_input or "").strip()
+                login_email = normalizar_email(login_digitado)
+                agora = agora_utc()
+                session = SessionLocal()
+                try:
+                    # Identidade global nesta fase: usuário OU e-mail único.
+                    # O empresa_id é obtido exclusivamente do registro autenticado.
+                    user = session.query(Usuario).filter(
+                        (Usuario.login == login_digitado) |
+                        (Usuario.email == login_email)
+                    ).first()
+    
+                    if user and user.bloqueado_ate and user.bloqueado_ate > agora:
+                        segundos = int((user.bloqueado_ate - agora).total_seconds())
+                        st.error(
+                            f"Acesso temporariamente bloqueado. Tente novamente em aproximadamente {max(segundos, 1)}s."
                         )
-                        session.commit()
-
-                        # Apenas usuário/e-mail é lembrado. A escrita no navegador
-                        # é adiada para o primeiro ciclo já autenticado, fora do submit.
-                        st.session_state["login_remember_pending"] = {
-                            "identificador": (
-                                user.email
-                                if (login_email and user.email == login_email)
-                                else user.login
-                            ),
-                            "lembrar": bool(lembrar_identificador),
-                        }
-
-                        st.session_state.update({
-                            "autenticado": True,
-                            "usuario_id": user.id,
-                            "empresa_id": int(user.empresa_id),
-                            "nome": user.nome,
-                            "login": user.login,
-                            "email": user.email,
-                            "perfil": user.perfil,
-                            "forcar_troca_senha": bool(user.must_change_password),
-                            "privacidade_pendente": user.privacidade_versao_aceita != PRIVACY_VERSION,
-                            "privacidade_dialog_suspenso": False,
-                            "privacidade_rever": False,
-                            "ultima_atividade_ts": time.time(),
-                            "ultimo_menu": "Painel Gerencial",
-                            "tela_config": False,
-                        })
-                        st.rerun()
                     else:
-                        # O bloqueio é persistido por usuário, não por session_state/navegador.
-                        if user:
-                            user.tentativas_login = int(user.tentativas_login or 0) + 1
-                            if user.tentativas_login >= LOGIN_MAX_ATTEMPTS:
-                                user.bloqueado_ate = agora + timedelta(minutes=LOGIN_BLOCK_MINUTES)
-                                user.tentativas_login = LOGIN_MAX_ATTEMPTS
+                        if user and user.bloqueado_ate and user.bloqueado_ate <= agora:
+                            user.bloqueado_ate = None
+                            user.tentativas_login = 0
+    
+                        autenticado_ok = (
+                            user is not None
+                            and int(user.ativo or 0) == 1
+                            and verify_password(senha_input, user.senha)
+                        )
+    
+                        if autenticado_ok:
+                            user.tentativas_login = 0
+                            user.bloqueado_ate = None
+                            user.ultimo_login = agora
+    
+                            # Compatibilidade com contas antigas criadas antes da V8.
+                            if verify_password("PRIMEIROACESSO", user.senha):
+                                user.must_change_password = 1
+    
+                            # Migração transparente: bcrypt legado -> Argon2id.
+                            if password_needs_rehash(user.senha):
+                                user.senha = hash_password(senha_input)
+    
                             registrar_auditoria(
                                 session,
                                 user.empresa_id,
                                 user.id,
-                                "LOGIN_FALHA",
+                                "LOGIN_SUCESSO",
                                 "Usuario",
                                 user.id,
-                                "Credencial inválida ou usuário inativo",
+                                f"Ambiente: {APP_ENV}; método: {'email' if login_email and user.email == login_email else 'usuario'}",
                             )
                             session.commit()
+    
+                            # Apenas usuário/e-mail é lembrado. A escrita no navegador
+                            # é adiada para o primeiro ciclo já autenticado, fora do submit.
+                            st.session_state["login_remember_pending"] = {
+                                "identificador": (
+                                    user.email
+                                    if (login_email and user.email == login_email)
+                                    else user.login
+                                ),
+                                "lembrar": bool(lembrar_identificador),
+                            }
+    
+                            st.session_state.update({
+                                "autenticado": True,
+                                "usuario_id": user.id,
+                                "empresa_id": int(user.empresa_id),
+                                "nome": user.nome,
+                                "login": user.login,
+                                "email": user.email,
+                                "perfil": user.perfil,
+                                "forcar_troca_senha": bool(user.must_change_password),
+                                "privacidade_pendente": user.privacidade_versao_aceita != PRIVACY_VERSION,
+                                "privacidade_dialog_suspenso": False,
+                                "privacidade_rever": False,
+                                "ultima_atividade_ts": time.time(),
+                                "ultimo_menu": "Painel Gerencial",
+                                "tela_config": False,
+                            })
+                            st.rerun()
                         else:
-                            # Pequeno atraso reduz a utilidade de enumeração/tentativas em massa.
-                            time.sleep(0.5)
-                        st.error("Credenciais inválidas ou acesso indisponível.")
-            except Exception:
-                session.rollback()
-                logger.exception("Falha inesperada na autenticação")
-                st.error("Não foi possível concluir a autenticação. Tente novamente.", icon=None)
-            finally:
-                session.close()
+                            # O bloqueio é persistido por usuário, não por session_state/navegador.
+                            if user:
+                                user.tentativas_login = int(user.tentativas_login or 0) + 1
+                                if user.tentativas_login >= LOGIN_MAX_ATTEMPTS:
+                                    user.bloqueado_ate = agora + timedelta(minutes=LOGIN_BLOCK_MINUTES)
+                                    user.tentativas_login = LOGIN_MAX_ATTEMPTS
+                                registrar_auditoria(
+                                    session,
+                                    user.empresa_id,
+                                    user.id,
+                                    "LOGIN_FALHA",
+                                    "Usuario",
+                                    user.id,
+                                    "Credencial inválida ou usuário inativo",
+                                )
+                                session.commit()
+                            else:
+                                # Pequeno atraso reduz a utilidade de enumeração/tentativas em massa.
+                                time.sleep(0.5)
+                            st.error("Credenciais inválidas ou acesso indisponível.")
+                except Exception:
+                    session.rollback()
+                    logger.exception("Falha inesperada na autenticação")
+                    st.error("Não foi possível concluir a autenticação. Tente novamente.", icon=None)
+                finally:
+                    session.close()
 
         st.markdown(
             """
