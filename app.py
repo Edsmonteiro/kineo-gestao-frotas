@@ -4951,7 +4951,7 @@ else:
                         st.plotly_chart(
                             fig_fluxo,
                             use_container_width=True,
-                            config={"displayModeBar": False},
+                            config={"displayModeBar": False, "scrollZoom": False, "staticPlot": True},
                         )
                     else:
                         st.info("Ainda não há histórico mensal suficiente.", icon=None)
@@ -5070,7 +5070,7 @@ else:
                             st.plotly_chart(
                                 fig_gastos,
                                 use_container_width=True,
-                                config={"displayModeBar": False},
+                                config={"displayModeBar": False, "scrollZoom": False, "staticPlot": True},
                             )
                     else:
                         st.info(
@@ -5867,7 +5867,7 @@ else:
                                                 xaxis=dict(title="", type="category"), 
                                                 yaxis=dict(visible=False)
                                             )
-                                            st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
+                                            st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False, "scrollZoom": False, "staticPlot": True})
                                         else:
                                             st.caption("Sem abastecimentos.")
                                             
@@ -5887,7 +5887,7 @@ else:
                                                 xaxis=dict(title="", type="category"), 
                                                 yaxis=dict(visible=False)
                                             )
-                                            st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
+                                            st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False, "scrollZoom": False, "staticPlot": True})
                                         else:
                                             st.caption("Sem outras despesas.")
                                 else:
