@@ -5315,160 +5315,161 @@ else:
 
                 with col_cad_tipo1:
                     with st.container(border=True):
-                        st.markdown("**Adicionar Novo Veículo**")
-                        status_novo = st.selectbox("Status inicial", ["Disponível", "Alugado", "Manutenção"])
-                        
-                        with st.container():
-                            ca, cb, cc = st.columns([0.9, 1.15, 0.7])
-                            placa = ca.text_input("Placa", placeholder="ABC-1234")
-                            fabricante = cb.text_input("Fabricante", placeholder="Ex.: Fiat")
-                            ano_modelo = cc.number_input("Ano/modelo", min_value=1900, max_value=2100, step=1, value=hoje_local().year)
-
-                            cm1, cm2, cm3 = st.columns(3)
-                            modelo = cm1.text_input("Modelo", placeholder="Ex.: Argo")
-                            versao = cm2.text_input("Versão (opcional)", placeholder="Ex.: Drive")
-                            motorizacao = cm3.text_input("Motorização (opcional)", placeholder="Ex.: 1.0 Firefly")
-
-                            cm4, cm5, cm6 = st.columns(3)
-                            combustivel_veiculo = cm4.selectbox("Combustível", ["Não informado", "Flex", "Gasolina", "Etanol", "Diesel", "Elétrico", "Híbrido"], key="frota_combustivel_novo")
-                            transmissao = cm5.selectbox("Transmissão", ["Não informado", "Manual", "Automática", "Automatizada", "CVT"], key="frota_transmissao_novo")
-                            km = cm6.number_input("KM atual", min_value=0.0, step=100.0, value=0.0)
-
-                            d_inicio = km_ini = d_fim = km_fim = cliente = cnpj_v = tipo_v = None
-                            valor_m = multa_c = juros_c = 0.0
-                            is_ativo = False
+                        with st.form("form_novo_veiculo", clear_on_submit=True):
+                            st.markdown("**Adicionar Novo Veículo**")
+                            status_novo = st.selectbox("Status inicial", ["Disponível", "Alugado", "Manutenção"])
                             
-                            if status_novo == "Alugado":
-                                st.markdown("---")
-                                st.markdown("**Dados do contrato**")
-                                c1, c2 = st.columns(2)
-                                cliente  = c1.text_input("Razão Social do Cliente")
-                                cnpj_v   = c2.text_input("CNPJ")
-                                
-                                c3, c4   = st.columns(2)
-                                d_inicio = c3.date_input("Início do contrato", format="DD/MM/YYYY")
-                                km_ini   = c4.number_input("KM na entrega", min_value=0.0, step=50.0, value=0.0)
-                                
-                                st.markdown("**Dados Financeiros do Contrato**")
-                                cf1, cf2 = st.columns(2)
-                                tipo_v = cf1.selectbox("Tipo de Cobrança", ["Fixo", "Variável"], key="frota_tipo")
-                                valor_m = 0.0
-                                comp_var_frota = None
-                                valor_comp_var_frota = 0.0
-                                valor_comp_var_frota_txt = ""
+                            with st.container():
+                                ca, cb, cc = st.columns([0.9, 1.15, 0.7])
+                                placa = ca.text_input("Placa", placeholder="ABC-1234")
+                                fabricante = cb.text_input("Fabricante", placeholder="Ex.: Fiat")
+                                ano_modelo = cc.number_input("Ano/modelo", min_value=1900, max_value=2100, step=1, value=hoje_local().year)
 
-                                if tipo_v == "Fixo":
-                                    valor_m_txt = cf2.text_input(
-                                        "Valor Mensal (R$)",
-                                        value="",
-                                        placeholder="Ex.: 52.800,00",
-                                        key="frota_val"
-                                    )
-                                    valor_m = parse_valor_cobranca(valor_m_txt)
-                                else:
-                                    cf2.info("Receita variável: o valor é informado por competência.")
-                                    vf1, vf2 = st.columns(2)
-                                    competencias_var = opcoes_competencias(12, 18)
-                                    comp_padrao = hoje_local().strftime("%m/%Y")
-                                    idx_comp = competencias_var.index(comp_padrao) if comp_padrao in competencias_var else 12
-                                    comp_var_frota = vf1.selectbox(
-                                        "Mês de referência",
-                                        competencias_var,
-                                        index=idx_comp,
-                                        key="frota_comp_var"
-                                    )
-                                    valor_comp_var_frota_txt = vf2.text_input(
-                                        "Valor previsto da competência (R$)",
-                                        value="",
-                                        placeholder="Ex.: 52.800,00",
-                                        key="frota_val_comp_var"
-                                    )
-                                    valor_comp_var_frota = parse_valor_cobranca(valor_comp_var_frota_txt)
-                                    st.caption(
-                                        "O valor acima pertence somente à competência selecionada. "
-                                        "Os próximos meses podem ter valores diferentes."
-                                    )
-                                
-                                cf3, cf4 = st.columns(2)
-                                multa_c = cf3.number_input("Multa por Atraso (%)", min_value=0.0, step=1.0, value=2.0, key="frota_mul")
-                                juros_c = cf4.number_input("Juros ao Mês (%)", min_value=0.0, step=0.1, value=1.0, key="frota_jur")
+                                cm1, cm2, cm3 = st.columns(3)
+                                modelo = cm1.text_input("Modelo", placeholder="Ex.: Argo")
+                                versao = cm2.text_input("Versão (opcional)", placeholder="Ex.: Drive")
+                                motorizacao = cm3.text_input("Motorização (opcional)", placeholder="Ex.: 1.0 Firefly")
 
-                                st.markdown("<br>", unsafe_allow_html=True)
-                                is_ativo = st.checkbox("Contrato em andamento", value=True)
-                                
-                                if not is_ativo:
-                                    c5, c6 = st.columns(2)
-                                    d_fim  = c5.date_input("Data de devolução", format="DD/MM/YYYY")
-                                    km_fim = c6.number_input("KM na devolução", min_value=0.0, step=50.0, value=0.0)
+                                cm4, cm5, cm6 = st.columns(3)
+                                combustivel_veiculo = cm4.selectbox("Combustível", ["Não informado", "Flex", "Gasolina", "Etanol", "Diesel", "Elétrico", "Híbrido"], key="frota_combustivel_novo")
+                                transmissao = cm5.selectbox("Transmissão", ["Não informado", "Manual", "Automática", "Automatizada", "CVT"], key="frota_transmissao_novo")
+                                km = cm6.number_input("KM atual", min_value=0.0, step=100.0, value=0.0)
 
-                            if st.button("Salvar Veículo", use_container_width=True):
-                                if not placa or not modelo:
-                                    st.error("Placa e Modelo são obrigatórios.", icon=None)
-                                else:
-                                    km_val = km or 0.0
-                                    session = SessionLocal()
-                                    erro = False
+                                d_inicio = km_ini = d_fim = km_fim = cliente = cnpj_v = tipo_v = None
+                                valor_m = multa_c = juros_c = 0.0
+                                is_ativo = False
+                                
+                                if status_novo == "Alugado":
+                                    st.markdown("---")
+                                    st.markdown("**Dados do contrato**")
+                                    c1, c2 = st.columns(2)
+                                    cliente  = c1.text_input("Razão Social do Cliente")
+                                    cnpj_v   = c2.text_input("CNPJ")
                                     
-                                    if status_novo == "Alugado" and not is_ativo:
-                                        km_ini_v = km_ini or 0.0
-                                        km_fim_v = km_fim or 0.0
-                                        if d_fim < d_inicio or km_fim_v < km_ini_v:
-                                            st.error("Datas ou KMs inválidos.", icon=None)
-                                            erro = True
-                                            
-                                    if not erro:
-                                        nv = Veiculo(
-                                            empresa_id=emp_id,
-                                            placa=placa.upper(),
-                                            fabricante=fabricante or None,
-                                            modelo=modelo,
-                                            ano_modelo=int(ano_modelo) if ano_modelo else None,
-                                            versao=versao or None,
-                                            motorizacao=motorizacao or None,
-                                            combustivel=None if combustivel_veiculo == "Não informado" else combustivel_veiculo,
-                                            transmissao=None if transmissao == "Não informado" else transmissao,
-                                            km_atual=km_val,
-                                            status=status_novo
+                                    c3, c4   = st.columns(2)
+                                    d_inicio = c3.date_input("Início do contrato", format="DD/MM/YYYY")
+                                    km_ini   = c4.number_input("KM na entrega", min_value=0.0, step=50.0, value=0.0)
+                                    
+                                    st.markdown("**Dados Financeiros do Contrato**")
+                                    cf1, cf2 = st.columns(2)
+                                    tipo_v = cf1.selectbox("Tipo de Cobrança", ["Fixo", "Variável"], key="frota_tipo")
+                                    valor_m = 0.0
+                                    comp_var_frota = None
+                                    valor_comp_var_frota = 0.0
+                                    valor_comp_var_frota_txt = ""
+
+                                    if tipo_v == "Fixo":
+                                        valor_m_txt = cf2.text_input(
+                                            "Valor Mensal (R$)",
+                                            value="",
+                                            placeholder="Ex.: 52.800,00",
+                                            key="frota_val"
                                         )
-                                        session.add(nv)
-                                        session.flush()
+                                        valor_m = parse_valor_cobranca(valor_m_txt)
+                                    else:
+                                        cf2.info("Receita variável: o valor é informado por competência.")
+                                        vf1, vf2 = st.columns(2)
+                                        competencias_var = opcoes_competencias(12, 18)
+                                        comp_padrao = hoje_local().strftime("%m/%Y")
+                                        idx_comp = competencias_var.index(comp_padrao) if comp_padrao in competencias_var else 12
+                                        comp_var_frota = vf1.selectbox(
+                                            "Mês de referência",
+                                            competencias_var,
+                                            index=idx_comp,
+                                            key="frota_comp_var"
+                                        )
+                                        valor_comp_var_frota_txt = vf2.text_input(
+                                            "Valor previsto da competência (R$)",
+                                            value="",
+                                            placeholder="Ex.: 52.800,00",
+                                            key="frota_val_comp_var"
+                                        )
+                                        valor_comp_var_frota = parse_valor_cobranca(valor_comp_var_frota_txt)
+                                        st.caption(
+                                            "O valor acima pertence somente à competência selecionada. "
+                                            "Os próximos meses podem ter valores diferentes."
+                                        )
+                                    
+                                    cf3, cf4 = st.columns(2)
+                                    multa_c = cf3.number_input("Multa por Atraso (%)", min_value=0.0, step=1.0, value=2.0, key="frota_mul")
+                                    juros_c = cf4.number_input("Juros ao Mês (%)", min_value=0.0, step=0.1, value=1.0, key="frota_jur")
+
+                                    st.markdown("<br>", unsafe_allow_html=True)
+                                    is_ativo = st.checkbox("Contrato em andamento", value=True)
+                                    
+                                    if not is_ativo:
+                                        c5, c6 = st.columns(2)
+                                        d_fim  = c5.date_input("Data de devolução", format="DD/MM/YYYY")
+                                        km_fim = c6.number_input("KM na devolução", min_value=0.0, step=50.0, value=0.0)
+
+                                if st.form_submit_button("Salvar Veículo", use_container_width=True):
+                                    if not placa or not modelo:
+                                        st.error("Placa e Modelo são obrigatórios.", icon=None)
+                                    else:
+                                        km_val = km or 0.0
+                                        session = SessionLocal()
+                                        erro = False
                                         
-                                        if status_novo == "Alugado":
-                                            novo_contrato = Contrato(
-                                                empresa_id=emp_id, 
-                                                veiculo_id=nv.id,
-                                                cliente=cliente, 
-                                                cnpj=cnpj_v,
-                                                data_inicio=d_inicio, 
-                                                data_fim=d_fim,
-                                                km_inicial=km_ini or 0.0, 
-                                                km_final=km_fim or 0.0,
-                                                ativo=1 if is_ativo else 0,
-                                                usuario_lancamento=st.session_state["nome"],
-                                                tipo_valor=tipo_v, 
-                                                valor_mensal=decimal_monetario(valor_m) if tipo_v == "Fixo" else Decimal("0.00"),
-                                                multa=multa_c, 
-                                                juros=juros_c
+                                        if status_novo == "Alugado" and not is_ativo:
+                                            km_ini_v = km_ini or 0.0
+                                            km_fim_v = km_fim or 0.0
+                                            if d_fim < d_inicio or km_fim_v < km_ini_v:
+                                                st.error("Datas ou KMs inválidos.", icon=None)
+                                                erro = True
+                                                
+                                        if not erro:
+                                            nv = Veiculo(
+                                                empresa_id=emp_id,
+                                                placa=placa.upper(),
+                                                fabricante=fabricante or None,
+                                                modelo=modelo,
+                                                ano_modelo=int(ano_modelo) if ano_modelo else None,
+                                                versao=versao or None,
+                                                motorizacao=motorizacao or None,
+                                                combustivel=None if combustivel_veiculo == "Não informado" else combustivel_veiculo,
+                                                transmissao=None if transmissao == "Não informado" else transmissao,
+                                                km_atual=km_val,
+                                                status=status_novo
                                             )
-                                            session.add(novo_contrato)
+                                            session.add(nv)
                                             session.flush()
-                                            if tipo_v == "Variável" and valor_comp_var_frota_txt.strip():
-                                                salvar_valor_variavel_competencia(
-                                                    session, emp_id, novo_contrato,
-                                                    comp_var_frota, valor_comp_var_frota
-                                                )
-                                                registrar_auditoria(
-                                                    session, emp_id, st.session_state["usuario_id"],
-                                                    "VALOR_VARIAVEL_COMPETENCIA", "Contrato", novo_contrato.id,
-                                                    f"Competência {comp_var_frota}; valor {valor_comp_var_frota:.2f}"
-                                                )
                                             
-                                        session.commit()
-                                        st.cache_data.clear()
-                                        session.close()
-                                        st.success(f"Veículo cadastrado com sucesso.")
-                                        time.sleep(0.8)
-                                        st.rerun()
+                                            if status_novo == "Alugado":
+                                                novo_contrato = Contrato(
+                                                    empresa_id=emp_id, 
+                                                    veiculo_id=nv.id,
+                                                    cliente=cliente, 
+                                                    cnpj=cnpj_v,
+                                                    data_inicio=d_inicio, 
+                                                    data_fim=d_fim,
+                                                    km_inicial=km_ini or 0.0, 
+                                                    km_final=km_fim or 0.0,
+                                                    ativo=1 if is_ativo else 0,
+                                                    usuario_lancamento=st.session_state["nome"],
+                                                    tipo_valor=tipo_v, 
+                                                    valor_mensal=decimal_monetario(valor_m) if tipo_v == "Fixo" else Decimal("0.00"),
+                                                    multa=multa_c, 
+                                                    juros=juros_c
+                                                )
+                                                session.add(novo_contrato)
+                                                session.flush()
+                                                if tipo_v == "Variável" and valor_comp_var_frota_txt.strip():
+                                                    salvar_valor_variavel_competencia(
+                                                        session, emp_id, novo_contrato,
+                                                        comp_var_frota, valor_comp_var_frota
+                                                    )
+                                                    registrar_auditoria(
+                                                        session, emp_id, st.session_state["usuario_id"],
+                                                        "VALOR_VARIAVEL_COMPETENCIA", "Contrato", novo_contrato.id,
+                                                        f"Competência {comp_var_frota}; valor {valor_comp_var_frota:.2f}"
+                                                    )
+                                                
+                                            session.commit()
+                                            st.cache_data.clear()
+                                            session.close()
+                                            st.success(f"Veículo cadastrado com sucesso.")
+                                            time.sleep(0.8)
+                                            st.rerun()
 
                 # ── Aba de Importação em Massa (.xls / .xlsx) ────────────────────────
                 with col_cad_tipo2:
