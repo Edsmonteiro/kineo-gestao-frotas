@@ -4476,7 +4476,9 @@ else:
         aviso_cookies()
 
 
-    with st.spinner("Processando..."):
+    # Evita que o spinner global reserve espaço acima da primeira tela.
+    # Operações específicas exibem seus próprios indicadores quando necessário.
+    if True:
 
         # ══════════════════════════════════════════════════════════════════════════
         # PAINEL GERENCIAL
