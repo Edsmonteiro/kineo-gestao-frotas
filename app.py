@@ -17,6 +17,8 @@ import base64
 import html
 import re
 import logging
+import textwrap
+import json
 from io import BytesIO
 from PIL import Image, UnidentifiedImageError
 from sqlalchemy import text as sql_text
@@ -30,6 +32,13 @@ try:
 except Exception:
     boto3 = None
     BOTO3_DISPONIVEL = False
+
+try:
+    from streamlit_js_eval import streamlit_js_eval
+    STREAMLIT_JS_EVAL_DISPONIVEL = True
+except Exception:
+    streamlit_js_eval = None
+    STREAMLIT_JS_EVAL_DISPONIVEL = False
 
 logger = logging.getLogger("kineo")
 
@@ -65,6 +74,550 @@ def formatar_serie_datetime_local(serie, formato="%d/%m/%Y %H:%M"):
     datas_utc = pd.to_datetime(serie, errors="coerce", utc=True)
     return datas_utc.dt.tz_convert(APP_TIMEZONE).dt.strftime(formato).fillna("—")
 
+
+# ─── IDENTIDADE / LOGIN V10.3 ────────────────────────────────────────────────
+LOGIN_REMEMBER_STORAGE_KEY = "kineo_login_identifier_v1"
+EMAIL_PATTERN = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+
+
+def normalizar_email(valor):
+    """Normaliza e-mail para busca/armazenamento sem alterar usuários legados sem e-mail."""
+    return str(valor or "").strip().lower()
+
+
+def email_valido(valor):
+    email = normalizar_email(valor)
+    return bool(email and len(email) <= 254 and EMAIL_PATTERN.fullmatch(email))
+
+
+def ler_identificador_lembrado():
+    """Lê somente o identificador salvo no localStorage. Nunca armazena senha/token/sessão."""
+    if not STREAMLIT_JS_EVAL_DISPONIVEL:
+        return ""
+    try:
+        expr = (
+            f"window.localStorage.getItem({json.dumps(LOGIN_REMEMBER_STORAGE_KEY)}) || ''"
+        )
+        valor = streamlit_js_eval(
+            js_expressions=expr,
+            want_output=True,
+            key="kineo_login_remember_read",
+        )
+        if valor is None:
+            return None
+        return str(valor).strip()
+    except Exception:
+        logger.exception("Falha ao ler identificador lembrado do navegador")
+        return ""
+
+
+def persistir_identificador_lembrado(identificador, lembrar):
+    """Persiste/remover apenas usuário/e-mail no navegador; não interfere no timeout da sessão."""
+    if not STREAMLIT_JS_EVAL_DISPONIVEL:
+        return False
+    try:
+        identificador = str(identificador or "").strip()
+        if lembrar and identificador:
+            expr = (
+                "(() => {"
+                f"window.localStorage.setItem({json.dumps(LOGIN_REMEMBER_STORAGE_KEY)}, "
+                f"{json.dumps(identificador)}); return 'ok';"
+                "})()"
+            )
+        else:
+            expr = (
+                "(() => {"
+                f"window.localStorage.removeItem({json.dumps(LOGIN_REMEMBER_STORAGE_KEY)}); "
+                "return 'ok';"
+                "})()"
+            )
+        streamlit_js_eval(
+            js_expressions=expr,
+            want_output=True,
+            key=f"kineo_login_remember_write_{uuid.uuid4().hex}",
+        )
+        return True
+    except Exception:
+        logger.exception("Falha ao persistir identificador lembrado no navegador")
+        return False
+
+
+def login_frota_data_uri():
+    """Carrega o asset visual do login. A tela continua funcional sem a imagem."""
+    candidatos = [
+        os.path.join("assets", "kineo_login_frota.png"),
+        os.path.join(os.path.dirname(__file__), "assets", "kineo_login_frota.png"),
+    ]
+    for caminho in candidatos:
+        try:
+            if os.path.exists(caminho):
+                with open(caminho, "rb") as f:
+                    return "data:image/png;base64," + base64.b64encode(f.read()).decode("ascii")
+        except Exception:
+            logger.exception("Falha ao carregar asset visual do login")
+    return ""
+
+
+def aplicar_css_login():
+    """CSS isolado da tela pública. Não altera a sidebar/layout do app autenticado."""
+    st.markdown(
+        """
+<style>
+[data-testid="stSidebar"] { display: none !important; }
+[data-testid="collapsedControl"] { display: none !important; }
+header[data-testid="stHeader"] { display: none !important; }
+
+[data-testid="stAppViewContainer"] {
+    background: linear-gradient(135deg, #E9F1FC 0%, #F7FAFF 55%, #E7F0FC 100%) !important;
+    background-image: none !important;
+    --kineo-sidebar-space: 0px !important;
+}
+
+[data-testid="stAppViewContainer"] > section.main,
+[data-testid="stAppViewContainer"] > .main,
+[data-testid="stMain"] {
+    margin-left: 0 !important;
+    width: 100% !important;
+    max-width: none !important;
+    padding-left: 0 !important;
+}
+
+/* O login ocupa uma viewport, sem scroll em desktop. */
+.block-container:has(.kineo-login-left) {
+    width: 100% !important;
+    max-width: 1480px !important;
+    min-height: 100dvh !important;
+    margin: 0 auto !important;
+    padding: 10px 18px !important;
+    box-sizing: border-box !important;
+    display: flex !important;
+    align-items: center !important;
+}
+
+.block-container:has(.kineo-login-left) > div { width: 100% !important; }
+
+div[data-testid="stHorizontalBlock"]:has(.kineo-login-left) {
+    gap: 0 !important;
+    width: 100% !important;
+    height: min(740px, calc(100dvh - 20px)) !important;
+    min-height: 560px !important;
+    max-height: 740px !important;
+    background: #FFFFFF;
+    border: 1px solid rgba(148, 163, 184, .22);
+    border-radius: 24px;
+    overflow: hidden;
+    box-shadow: 0 22px 54px rgba(30, 64, 175, .12);
+}
+
+div[data-testid="stColumn"]:has(.kineo-login-left) {
+    background: #EAF3FF;
+    padding: 0 !important;
+    overflow: hidden !important;
+}
+
+div[data-testid="stColumn"]:has(.kineo-login-right) {
+    background: #FFFFFF;
+    padding: 24px 48px 18px !important;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    overflow: hidden;
+}
+
+div[data-testid="stColumn"]:has(.kineo-login-right) .stTextInput > div > div > input {
+    min-height: 46px;
+    border-radius: 11px !important;
+    border: 1px solid #CBD5E1 !important;
+    background: #FFFFFF !important;
+    font-size: .95rem !important;
+    color: #0F2B57 !important;
+    padding-left: 15px !important;
+}
+
+div[data-testid="stColumn"]:has(.kineo-login-right) .stTextInput > div > div > input:focus {
+    border-color: #1768E5 !important;
+    box-shadow: 0 0 0 3px rgba(23, 104, 229, .12) !important;
+}
+
+div[data-testid="stColumn"]:has(.kineo-login-right) label {
+    color: #0F2B57 !important;
+    font-weight: 650 !important;
+}
+
+div[data-testid="stColumn"]:has(.kineo-login-right) div[data-testid="stForm"] {
+    border: 0 !important;
+    padding: 0 !important;
+}
+
+div[data-testid="stColumn"]:has(.kineo-login-right) div[data-testid="stFormSubmitButton"] button[kind="primary"],
+div[data-testid="stColumn"]:has(.kineo-login-right) div[data-testid="stFormSubmitButton"] button {
+    min-height: 46px;
+    border-radius: 10px !important;
+}
+
+/* A recuperação é uma ação secundária: aparência de link, não CTA concorrente. */
+div[data-testid="stColumn"]:has(.kineo-login-right)
+  div[data-testid="stHorizontalBlock"]
+  div[data-testid="stColumn"]:last-child
+  div[data-testid="stFormSubmitButton"] button {
+    background: transparent !important;
+    color: #0B63D9 !important;
+    border: 0 !important;
+    box-shadow: none !important;
+    min-height: 34px !important;
+    padding: 0 6px !important;
+    font-weight: 600 !important;
+}
+
+div[data-testid="stColumn"]:has(.kineo-login-right) div[data-testid="stFormSubmitButton"]:last-child button {
+    background: linear-gradient(90deg, #1262D8 0%, #0B6CF2 100%) !important;
+    color: white !important;
+    border: 0 !important;
+    font-weight: 700 !important;
+    font-size: .95rem !important;
+    box-shadow: 0 10px 26px rgba(11, 108, 242, .18);
+}
+
+.kineo-login-left {
+    position: relative;
+    height: 100%;
+    min-height: 0;
+    padding: 30px 44px 34px;
+    overflow: hidden;
+    color: #0E2A55;
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+    isolation: isolate;
+    background:
+        radial-gradient(circle at 96% 6%, rgba(40, 126, 245, .28) 0 11%, transparent 11.5%),
+        radial-gradient(circle at 71% 34%, rgba(255,255,255,.72) 0 18%, transparent 35%),
+        linear-gradient(150deg, #EEF6FF 0%, #E4F0FF 42%, #CFE3FF 72%, #AFCFFF 100%);
+}
+
+/* Fundo decorativo ocupa toda a metade esquerda, sem usar imagem raster. */
+.kineo-login-left::before {
+    content: "";
+    position: absolute;
+    width: 430px;
+    height: 430px;
+    border: 1px solid rgba(37, 99, 235, .16);
+    border-radius: 50%;
+    right: -155px;
+    top: -185px;
+    z-index: -2;
+    box-shadow:
+        0 0 0 44px rgba(255,255,255,.18),
+        0 0 0 88px rgba(255,255,255,.10);
+}
+
+.kineo-login-left::after {
+    content: "";
+    position: absolute;
+    left: -9%;
+    right: -9%;
+    bottom: -15%;
+    height: 48%;
+    border-radius: 55% 45% 0 0 / 30% 34% 0 0;
+    background:
+        radial-gradient(circle at 22% 62%, rgba(255,255,255,.38), transparent 19%),
+        radial-gradient(circle at 72% 22%, rgba(255,255,255,.22), transparent 24%),
+        linear-gradient(155deg, rgba(72, 151, 255, .28) 0%, rgba(26, 108, 238, .60) 58%, rgba(11, 89, 220, .82) 100%);
+    transform: rotate(-4deg);
+    z-index: -1;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,.38);
+}
+
+.kineo-login-brand {
+    display: flex;
+    align-items: center;
+    gap: 13px;
+    font-size: 1.62rem;
+    font-weight: 850;
+    letter-spacing: -.04em;
+    position: relative;
+    z-index: 3;
+}
+
+.kineo-login-mark {
+    width: 42px;
+    height: 42px;
+    border-radius: 13px;
+    background: linear-gradient(135deg, #0B6CF2, #4EA4FF);
+    display: grid;
+    place-items: center;
+    color: #fff;
+    font-weight: 900;
+    box-shadow: 0 12px 28px rgba(11, 108, 242, .24);
+}
+
+.kineo-login-eyebrow {
+    margin-top: 34px;
+    font-size: .76rem;
+    letter-spacing: .15em;
+    font-weight: 800;
+    color: #1768E5;
+    text-transform: uppercase;
+    position: relative;
+    z-index: 3;
+}
+
+.kineo-login-title {
+    margin: 8px 0 12px;
+    font-size: clamp(2.0rem, 2.75vw, 3.1rem);
+    line-height: 1.02;
+    font-weight: 850;
+    letter-spacing: -.055em;
+    max-width: 650px;
+    position: relative;
+    z-index: 3;
+}
+
+.kineo-login-title span { color: #1262D8; }
+
+.kineo-login-subtitle {
+    max-width: 560px;
+    font-size: .92rem;
+    line-height: 1.48;
+    color: #536784;
+    position: relative;
+    z-index: 3;
+}
+
+.kineo-login-features {
+    margin-top: 24px;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 14px;
+    width: 100%;
+    max-width: 650px;
+    position: relative;
+    z-index: 4;
+}
+
+.kineo-login-feature {
+    display: grid;
+    grid-template-columns: 46px 1fr;
+    gap: 12px;
+    align-items: center;
+    min-width: 0;
+    min-height: 86px;
+    padding: 12px 14px;
+    border-radius: 16px;
+    background: rgba(255,255,255,.84);
+    border: 1px solid rgba(255,255,255,.72);
+    box-shadow: 0 12px 28px rgba(38, 91, 164, .09);
+    backdrop-filter: blur(4px);
+}
+
+.kineo-login-feature-icon {
+    width: 44px;
+    height: 44px;
+    border-radius: 14px;
+    background: linear-gradient(145deg, #F8FBFF, #E7F1FF);
+    box-shadow: 0 6px 16px rgba(15,43,87,.08);
+    display: grid;
+    place-items: center;
+    color: #1262D8;
+    font-size: 1.05rem;
+    font-weight: 900;
+}
+
+.kineo-login-feature strong {
+    display: block;
+    font-size: .88rem;
+    line-height: 1.22;
+    color: #0F2B57;
+    margin-bottom: 4px;
+}
+
+.kineo-login-feature span {
+    display: block;
+    color: #536784;
+    font-size: .72rem;
+    line-height: 1.35;
+}
+
+.kineo-login-result {
+    margin-top: 24px;
+    width: min(510px, 82%);
+    padding: 19px 22px 19px 78px;
+    border-radius: 18px;
+    background:
+        radial-gradient(circle at 92% 10%, rgba(65, 157, 255, .24), transparent 28%),
+        linear-gradient(135deg, #0C376F 0%, #0A2855 56%, #0A3E84 100%);
+    color: white;
+    box-shadow: 0 22px 46px rgba(7, 37, 78, .24);
+    position: relative;
+    z-index: 5;
+    overflow: hidden;
+}
+
+.kineo-login-result::before {
+    content: "↗";
+    position: absolute;
+    left: 18px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 46px;
+    height: 46px;
+    border-radius: 50%;
+    display: grid;
+    place-items: center;
+    font-size: 1.25rem;
+    font-weight: 900;
+    color: #FFFFFF;
+    border: 1px solid rgba(255,255,255,.24);
+    background: rgba(255,255,255,.06);
+}
+
+.kineo-login-result::after {
+    content: "";
+    position: absolute;
+    width: 125px;
+    height: 125px;
+    border: 1px solid rgba(255,255,255,.16);
+    border-radius: 50%;
+    right: -40px;
+    bottom: -62px;
+}
+
+.kineo-login-result strong { font-size: 1.02rem; }
+.kineo-login-result div { margin-top: 6px; font-size: .79rem; opacity: .92; line-height: 1.42; }
+
+.kineo-login-right { max-width: 610px; margin: 0 auto 10px; }
+.kineo-login-right h1 {
+    margin: 0; color: #0D2A56;
+    font-size: clamp(1.65rem, 2.15vw, 2.2rem);
+    letter-spacing: -.04em;
+}
+.kineo-login-right p {
+    margin: 6px 0 16px;
+    color: #687994;
+    font-size: .94rem;
+}
+.kineo-login-exclusive {
+    margin-top: 13px;
+    padding: 12px 14px;
+    border: 1px solid #D9E8FB;
+    border-radius: 13px;
+    background: linear-gradient(135deg, #F3F8FF, #F8FBFF);
+    color: #24466F;
+    font-size: .76rem;
+    line-height: 1.4;
+}
+.kineo-login-exclusive strong { display: block; color: #123C73; margin-bottom: 3px; }
+.kineo-login-footer {
+    margin-top: 11px;
+    text-align: center;
+    color: #71819A;
+    font-size: .72rem;
+    line-height: 1.6;
+}
+.kineo-login-footer span { color: #365C8D; margin: 0 8px; }
+
+.kineo-login-legal-label {
+    margin-top: 9px;
+    text-align: center;
+    color: #71819A;
+    font-size: .70rem;
+}
+
+div[data-testid="stColumn"]:has(.kineo-login-right) div[data-testid="stButton"] button {
+    background: transparent !important;
+    color: #365C8D !important;
+    border: 0 !important;
+    box-shadow: none !important;
+    min-height: 28px !important;
+    padding: 0 4px !important;
+    font-size: .72rem !important;
+    font-weight: 600 !important;
+}
+
+div[data-testid="stColumn"]:has(.kineo-login-right) div[data-testid="stButton"] button:hover {
+    color: #0B63D9 !important;
+    text-decoration: underline !important;
+}
+
+@media (min-width: 1025px) and (max-height: 700px) {
+    div[data-testid="stHorizontalBlock"]:has(.kineo-login-left) { min-height: 540px !important; }
+    .kineo-login-left { padding: 20px 30px 24px; }
+    .kineo-login-eyebrow { margin-top: 18px; }
+    .kineo-login-title { font-size: clamp(1.75rem, 2.35vw, 2.35rem); }
+    .kineo-login-subtitle { font-size: .80rem; }
+    .kineo-login-features { margin-top: 12px; gap: 8px; }
+    .kineo-login-feature { min-height: 64px; padding: 8px 10px; grid-template-columns: 36px 1fr; gap: 8px; }
+    .kineo-login-feature-icon { width: 34px; height: 34px; border-radius: 10px; }
+    .kineo-login-feature strong { font-size: .76rem; margin-bottom: 2px; }
+    .kineo-login-feature span { font-size: .62rem; }
+    .kineo-login-result { margin-top: 12px; padding: 12px 16px 12px 64px; }
+    .kineo-login-result::before { left: 14px; width: 38px; height: 38px; }
+    div[data-testid="stColumn"]:has(.kineo-login-right) { padding: 18px 38px 14px !important; }
+    .kineo-login-right p { margin-bottom: 10px; }
+    .kineo-login-exclusive { margin-top: 9px; padding: 9px 12px; }
+    .kineo-login-footer { margin-top: 7px; }
+}
+
+@media (max-width: 1024px) {
+    .block-container:has(.kineo-login-left) {
+        min-height: auto !important;
+        display: block !important;
+        padding: 12px !important;
+    }
+    div[data-testid="stHorizontalBlock"]:has(.kineo-login-left) {
+        display: block !important;
+        height: auto !important;
+        min-height: unset !important;
+        max-height: none !important;
+    }
+    div[data-testid="stColumn"]:has(.kineo-login-left),
+    div[data-testid="stColumn"]:has(.kineo-login-right) {
+        width: 100% !important;
+        flex: 1 1 100% !important;
+    }
+    .kineo-login-left { min-height: 640px; padding: 34px 34px 38px; }
+    div[data-testid="stColumn"]:has(.kineo-login-right) { padding: 38px 32px 26px !important; }
+}
+
+@media (max-width: 680px) {
+    .block-container:has(.kineo-login-left) { padding: 0 !important; }
+    div[data-testid="stHorizontalBlock"]:has(.kineo-login-left) {
+        border-radius: 0; border: 0; box-shadow: none;
+    }
+    .kineo-login-left { min-height: 440px; padding: 28px 22px; }
+    .kineo-login-eyebrow { margin-top: 28px; }
+    .kineo-login-title { font-size: 1.9rem; max-width: 94%; }
+    .kineo-login-subtitle { max-width: 92%; }
+    .kineo-login-features { display: none; }
+    .kineo-login-result { width: min(360px, 94%); margin-top: auto; padding: 15px 16px 15px 64px; }
+    div[data-testid="stColumn"]:has(.kineo-login-right) { padding: 34px 22px 24px !important; }
+}
+</style>
+        """,
+        unsafe_allow_html=True,
+    )
+
+def render_login_hero():
+    # Painel esquerdo integralmente preenchido por arte CSS responsiva.
+    # Mantém o lado direito funcional sem alterações de comportamento.
+    hero_html = (
+        '<div class="kineo-login-left">'
+        '<div class="kineo-login-brand"><div class="kineo-login-mark">K</div><div>Kineo</div></div>'
+        '<div class="kineo-login-eyebrow">Gestão de frotas</div>'
+        '<div class="kineo-login-title">Gestão de frotas<br><span>inteligente e completa</span></div>'
+        '<div class="kineo-login-subtitle">Tenha controle total da sua frota, reduza custos e aumente a eficiência da sua operação.</div>'
+        '<div class="kineo-login-features">'
+        '<div class="kineo-login-feature"><div class="kineo-login-feature-icon">F</div><div><strong>Controle total</strong><span>Veículos, motoristas e contratos em um só lugar.</span></div></div>'
+        '<div class="kineo-login-feature"><div class="kineo-login-feature-icon">$</div><div><strong>Redução de custos</strong><span>Identifique gastos e aumente a eficiência operacional.</span></div></div>'
+        '<div class="kineo-login-feature"><div class="kineo-login-feature-icon">↗</div><div><strong>Relatórios inteligentes</strong><span>Informação confiável para decisões melhores.</span></div></div>'
+        '<div class="kineo-login-feature"><div class="kineo-login-feature-icon">✓</div><div><strong>Segurança e confiança</strong><span>Acesso controlado e dados separados por empresa.</span></div></div>'
+        '</div>'
+        '<div class="kineo-login-result"><strong>Informação que move resultados</strong><div>Mais controle, mais produtividade e melhores decisões para sua operação.</div></div>'
+        '</div>'
+    )
+    st.markdown(hero_html, unsafe_allow_html=True)
+
+
 # ─── DIRETÓRIOS ──────────────────────────────────────────────────────────────
 for pasta in ["comprovantes", "logos"]:
     os.makedirs(pasta, exist_ok=True)
@@ -81,6 +634,8 @@ for key, default in [
     ("ultima_atividade_ts", None),
     ("sessao_expirada_aviso", False),
     ("credencial_temporaria", None),
+    ("login_identifier_prefill", ""),
+    ("login_remember_loaded", False),
     ("uploader_key", 0), # Chave para resetar o uploader de planilhas
     ("custos_uploader_version", 0), # Chave para limpar o comprovante após registrar despesa
     ("recorrencias_editor_version", 0),
@@ -2409,15 +2964,17 @@ def render_gestao_usuarios(emp_id):
     credencial = st.session_state.pop("credencial_temporaria", None)
     if credencial:
         st.success("Credencial temporária gerada. Copie agora: ela não será exibida novamente.")
+        email_cred = str(credencial.get("email") or "").strip()
+        linha_email = f"\nE-mail: {email_cred}" if email_cred else ""
         st.code(
-            f"Login: {credencial['login']}\nSenha temporária: {credencial['senha']}",
+            f"Usuário: {credencial['login']}{linha_email}\nSenha temporária: {credencial['senha']}",
             language=None,
         )
         st.caption("O usuário será obrigado a definir uma senha pessoal no primeiro acesso.")
 
     df_users = carregar_dados_tabela(
         f"""
-        SELECT id, nome, login, perfil, ativo, must_change_password,
+        SELECT id, nome, login, email, perfil, ativo, must_change_password,
                tentativas_login, bloqueado_ate, ultimo_login
         FROM usuarios
         WHERE empresa_id = :empresa_id
@@ -2438,8 +2995,8 @@ def render_gestao_usuarios(emp_id):
             users_view["ultimo_login"], "%d/%m/%Y %H:%M"
         )
         st.dataframe(
-            users_view[["nome", "login", "perfil", "Status", "Troca de senha", "Último acesso"]].rename(
-                columns={"nome": "Nome", "login": "Login", "perfil": "Perfil"}
+            users_view[["nome", "login", "email", "perfil", "Status", "Troca de senha", "Último acesso"]].rename(
+                columns={"nome": "Nome", "login": "Usuário", "email": "E-mail", "perfil": "Perfil"}
             ),
             use_container_width=True,
             hide_index=True,
@@ -2458,27 +3015,42 @@ def render_gestao_usuarios(emp_id):
         with st.form("form_novo_user", clear_on_submit=True):
             ua, ub = st.columns(2)
             u_nome = ua.text_input("Colaborador", max_chars=120)
-            u_login = ub.text_input("Login Sistêmico", max_chars=120)
+            u_login = ub.text_input("Usuário", max_chars=120, help="Identificador legado/alternativo de acesso.")
+            u_email = st.text_input("E-mail", max_chars=254, placeholder="nome@empresa.com.br")
             u_perfil = st.selectbox("Camada de Acesso", ["operador", "admin"])
 
             if st.form_submit_button("Criar credencial", use_container_width=True):
                 nome_limpo = str(u_nome or "").strip()
                 login_limpo = str(u_login or "").strip()
+                email_limpo = normalizar_email(u_email)
                 if len(nome_limpo) < 2 or len(login_limpo) < 3:
-                    st.error("Informe nome e login válidos.", icon=None)
+                    st.error("Informe nome e usuário válidos.", icon=None)
                 elif not re.fullmatch(r"[A-Za-z0-9._@-]+", login_limpo):
-                    st.error("O login pode conter apenas letras, números, ponto, hífen, _ e @.", icon=None)
+                    st.error("O usuário pode conter apenas letras, números, ponto, hífen, _ e @.", icon=None)
+                elif not email_valido(email_limpo):
+                    st.error("Informe um e-mail válido para o colaborador.", icon=None)
                 else:
                     session = SessionLocal()
                     try:
-                        if session.query(Usuario).filter(Usuario.login == login_limpo).first():
-                            st.error("Identificador de login em uso.", icon=None)
+                        conflito_login = session.query(Usuario).filter(
+                            (Usuario.login == login_limpo) |
+                            (Usuario.email == normalizar_email(login_limpo))
+                        ).first()
+                        conflito_email = session.query(Usuario).filter(
+                            (Usuario.email == email_limpo) |
+                            (Usuario.login == email_limpo)
+                        ).first()
+                        if conflito_login:
+                            st.error("Identificador de usuário em uso por outra credencial.", icon=None)
+                        elif conflito_email:
+                            st.error("E-mail já vinculado a outra credencial.", icon=None)
                         else:
                             temporaria = gerar_senha_temporaria()
                             novo_user = Usuario(
                                 empresa_id=emp_id,
                                 nome=nome_limpo,
                                 login=login_limpo,
+                                email=email_limpo,
                                 senha=hash_password(temporaria),
                                 perfil=u_perfil,
                                 ativo=1,
@@ -2494,11 +3066,12 @@ def render_gestao_usuarios(emp_id):
                                 "USUARIO_CRIADO",
                                 "Usuario",
                                 novo_user.id,
-                                f"Login {login_limpo}; perfil {u_perfil}",
+                                f"Login {login_limpo}; e-mail {email_limpo}; perfil {u_perfil}",
                             )
                             session.commit()
                             st.session_state["credencial_temporaria"] = {
                                 "login": login_limpo,
+                                "email": email_limpo,
                                 "senha": temporaria,
                             }
                             st.cache_data.clear()
@@ -2523,7 +3096,9 @@ def render_gestao_usuarios(emp_id):
                 uid = opt_u[u_sel]
                 row_u = df_users[df_users["id"] == uid].iloc[0]
                 e_nom = st.text_input("Nome", value=str(row_u["nome"]), max_chars=120)
-                e_log = st.text_input("Login", value=str(row_u["login"]), max_chars=120)
+                e_log = st.text_input("Usuário", value=str(row_u["login"]), max_chars=120)
+                email_atual = "" if pd.isna(row_u.get("email")) else str(row_u.get("email") or "")
+                e_email = st.text_input("E-mail", value=email_atual, max_chars=254)
                 e_prf = st.selectbox(
                     "Perfil",
                     ["operador", "admin"],
@@ -2538,19 +3113,37 @@ def render_gestao_usuarios(emp_id):
                 if st.button("Salvar Modificação", use_container_width=True, key="admin_salvar_usuario"):
                     nome_limpo = str(e_nom or "").strip()
                     login_limpo = str(e_log or "").strip()
+                    email_limpo = normalizar_email(e_email)
                     if uid == st.session_state["usuario_id"] and e_ativo == "Revogado":
                         st.error("Você não pode revogar o próprio acesso.", icon=None)
                     elif not re.fullmatch(r"[A-Za-z0-9._@-]+", login_limpo):
-                        st.error("Login inválido.", icon=None)
+                        st.error("Usuário inválido.", icon=None)
+                    elif email_limpo and not email_valido(email_limpo):
+                        st.error("E-mail inválido.", icon=None)
                     else:
                         session = SessionLocal()
                         try:
-                            conflito = session.query(Usuario).filter(
-                                Usuario.login == login_limpo,
+                            conflito_login = session.query(Usuario).filter(
                                 Usuario.id != uid,
+                                (
+                                    (Usuario.login == login_limpo) |
+                                    (Usuario.email == normalizar_email(login_limpo))
+                                ),
                             ).first()
-                            if conflito:
-                                st.error("Conflito de logins na base.", icon=None)
+                            conflito_email = (
+                                session.query(Usuario).filter(
+                                    Usuario.id != uid,
+                                    (
+                                        (Usuario.email == email_limpo) |
+                                        (Usuario.login == email_limpo)
+                                    ),
+                                ).first()
+                                if email_limpo else None
+                            )
+                            if conflito_login:
+                                st.error("Conflito de usuários na base.", icon=None)
+                            elif conflito_email:
+                                st.error("E-mail já vinculado a outro usuário.", icon=None)
                             else:
                                 u = tenant_get(session, Usuario, uid, emp_id)
                                 if u is None:
@@ -2558,6 +3151,7 @@ def render_gestao_usuarios(emp_id):
                                 else:
                                     u.nome = nome_limpo
                                     u.login = login_limpo
+                                    u.email = email_limpo or None
                                     u.perfil = e_prf
                                     u.ativo = 1 if e_ativo == "Ativo" else 0
                                     if u.ativo == 0:
@@ -2570,7 +3164,7 @@ def render_gestao_usuarios(emp_id):
                                         "USUARIO_ATUALIZADO",
                                         "Usuario",
                                         u.id,
-                                        f"Perfil {e_prf}; acesso {e_ativo}",
+                                        f"Perfil {e_prf}; acesso {e_ativo}; e-mail {email_limpo or 'não informado'}",
                                     )
                                     session.commit()
                                     st.cache_data.clear()
@@ -2622,6 +3216,7 @@ def render_gestao_usuarios(emp_id):
                         session.commit()
                         st.session_state["credencial_temporaria"] = {
                             "login": u.login,
+                            "email": u.email,
                             "senha": temporaria,
                         }
                         st.cache_data.clear()
@@ -2747,25 +3342,98 @@ def render_gestao_usuarios(emp_id):
                     session.close()
 
 
+
+def _conteudo_politica_login():
+    st.caption(f"Última atualização: 1 de setembro de 2026 · Versão {PRIVACY_VERSION}")
+    st.markdown("**1. Escopo**")
+    st.markdown(
+        "Esta política descreve como o **Kineo | Gestão de Frotas** trata informações necessárias "
+        "à administração corporativa de veículos, contratos, custos, cobranças, motoristas e usuários autorizados."
+    )
+    st.markdown("**2. Dados e finalidades**")
+    st.markdown(
+        "Podem ser tratados dados de identificação e acesso, dados operacionais de motoristas, empresas, "
+        "veículos, manutenção, contratos, custos, cobranças e arquivos enviados ao sistema. O tratamento serve "
+        "à autenticação, gestão da frota, segurança, auditoria e execução das rotinas da organização."
+    )
+    st.markdown("**3. Privacidade, sessão e segurança**")
+    st.markdown(
+        "O acesso é autenticado e separado por empresa. O Kineo utiliza recursos técnicos necessários para "
+        "sessão, segurança e preferências de interface e não implementa cookies próprios de publicidade comportamental."
+    )
+    st.markdown("**4. LGPD e direitos**")
+    st.markdown(
+        "O tratamento deve observar a Lei Geral de Proteção de Dados (LGPD) e demais normas aplicáveis. "
+        "Solicitações relativas a dados pessoais devem ser encaminhadas à organização responsável pelo ambiente."
+    )
+    st.info(
+        "A política completa permanece disponível dentro do Kineo após a autenticação.",
+        icon=None,
+    )
+
+
+def _conteudo_termos_login():
+    st.caption("Termos de Uso · versão operacional")
+    st.markdown("**Acesso autorizado**")
+    st.markdown(
+        "O Kineo é destinado exclusivamente a usuários autorizados pela organização responsável pelo ambiente. "
+        "As credenciais são pessoais e não devem ser compartilhadas."
+    )
+    st.markdown("**Uso adequado**")
+    st.markdown(
+        "O sistema deve ser utilizado para finalidades profissionais relacionadas à gestão de frotas e às rotinas "
+        "operacionais autorizadas pela empresa. Tentativas de acesso indevido, alteração não autorizada ou uso abusivo "
+        "podem resultar em bloqueio ou revogação do acesso."
+    )
+    st.markdown("**Dados e responsabilidade**")
+    st.markdown(
+        "Cada organização é responsável pela legitimidade dos dados inseridos, pela gestão dos usuários autorizados "
+        "e pela observância das obrigações legais aplicáveis à sua operação."
+    )
+    st.markdown("**Auditoria e segurança**")
+    st.markdown(
+        "Ações relevantes de autenticação e administração podem ser registradas para segurança, auditoria e rastreabilidade."
+    )
+    st.caption(
+        "Estes termos apresentam as regras operacionais atuais do produto e podem ser atualizados conforme a evolução do Kineo."
+    )
+
+
+if hasattr(st, "dialog"):
+    politica_login_dialog = st.dialog("Política de Privacidade", width="large")(_conteudo_politica_login)
+    termos_login_dialog = st.dialog("Termos de Uso", width="large")(_conteudo_termos_login)
+else:
+    politica_login_dialog = _conteudo_politica_login
+    termos_login_dialog = _conteudo_termos_login
+
+
 # ══════════════════════════════════════════════════════════════════════════════
-# 1 · TELA DE LOGIN
+# 1 · TELA DE LOGIN — UX V10.3
 # ══════════════════════════════════════════════════════════════════════════════
 if not st.session_state["autenticado"]:
-    st.markdown("<br><br>", unsafe_allow_html=True)
+    aplicar_css_login()
 
-    col_l, col_c, col_r = st.columns([1, 1.1, 1])
+    # O componente de localStorage retorna de forma assíncrona e pode provocar um rerun.
+    # Apenas o identificador é lembrado; senha, tenant e tokens nunca são persistidos aqui.
+    if not st.session_state.get("login_remember_loaded", False):
+        lembrado = ler_identificador_lembrado()
+        if STREAMLIT_JS_EVAL_DISPONIVEL:
+            # Quando o componente já retornou (inclusive string vazia), marca como carregado.
+            # Na primeira renderização ele pode retornar None e então o próprio componente reroda.
+            if lembrado is not None:
+                st.session_state["login_identifier_prefill"] = lembrado
+                st.session_state["login_remember_loaded"] = True
 
-    with col_c:
-        st.markdown("""
-        <div style="text-align:center; margin-bottom:2rem;">
-            <div style="font-size:2.5rem; font-weight:800; letter-spacing:-0.04em; color:#111827;">
-                Kineo
-            </div>
-            <div style="font-size:0.875rem; color:#6B7280; margin-top:0.25rem;">
-                Gestão corporativa de frotas
-            </div>
-        </div>
-        """, unsafe_allow_html=True)
+    col_visual, col_login = st.columns([1.08, 0.92])
+
+    with col_visual:
+        render_login_hero()
+
+    with col_login:
+        st.markdown(
+            '<div class="kineo-login-right"><h1>Bem-vindo de volta!</h1><p>Acesse sua conta para continuar.</p></div>',
+            unsafe_allow_html=True,
+        )
 
         if st.session_state.get("sessao_expirada_aviso"):
             st.warning(
@@ -2774,109 +3442,183 @@ if not st.session_state["autenticado"]:
             )
             st.session_state["sessao_expirada_aviso"] = False
 
-        with st.container(border=True):
-            st.markdown("<p style='font-weight:600; margin-bottom:0.25rem;'>Acesse sua conta</p>", unsafe_allow_html=True)
+        identificador_inicial = str(st.session_state.get("login_identifier_prefill") or "").strip()
 
-            with st.form("login_form"):
-                usuario_input = st.text_input("Login", placeholder="Usuário", max_chars=120)
-                senha_input = st.text_input(
-                    "Senha",
-                    type="password",
-                    placeholder="••••••••",
-                    max_chars=PASSWORD_MAX_LENGTH,
+        with st.form("login_form"):
+            usuario_input = st.text_input(
+                "E-mail ou usuário",
+                value=identificador_inicial,
+                placeholder="seu@email.com ou usuário",
+                max_chars=254,
+            )
+            senha_input = st.text_input(
+                "Senha",
+                type="password",
+                placeholder="Digite sua senha",
+                max_chars=PASSWORD_MAX_LENGTH,
+            )
+
+            c_lembrar, c_esqueci = st.columns([1.15, 0.85])
+            with c_lembrar:
+                lembrar_identificador = st.checkbox(
+                    "Lembrar meu usuário/e-mail",
+                    value=bool(identificador_inicial),
                 )
-                submitted = st.form_submit_button("Entrar", use_container_width=True)
+            with c_esqueci:
+                esqueceu_senha = st.form_submit_button(
+                    "Esqueci minha senha",
+                    use_container_width=True,
+                )
 
-            if submitted:
-                login_digitado = str(usuario_input or "").strip()
-                agora = agora_utc()
-                session = SessionLocal()
-                try:
-                    user = session.query(Usuario).filter(Usuario.login == login_digitado).first()
+            submitted = st.form_submit_button(
+                "Entrar",
+                type="primary",
+                use_container_width=True,
+            )
 
-                    if user and user.bloqueado_ate and user.bloqueado_ate > agora:
-                        segundos = int((user.bloqueado_ate - agora).total_seconds())
-                        st.error(
-                            f"Acesso temporariamente bloqueado. Tente novamente em aproximadamente {max(segundos, 1)}s."
+        if esqueceu_senha:
+            st.info(
+                "Por segurança, a redefinição é feita pelo administrador da sua empresa. "
+                "Solicite a ele uma nova credencial temporária.",
+                icon=None,
+            )
+
+        if submitted:
+            login_digitado = str(usuario_input or "").strip()
+            login_email = normalizar_email(login_digitado)
+            agora = agora_utc()
+            session = SessionLocal()
+            try:
+                # Identidade global nesta fase: usuário OU e-mail único.
+                # O empresa_id é obtido exclusivamente do registro autenticado.
+                user = session.query(Usuario).filter(
+                    (Usuario.login == login_digitado) |
+                    (Usuario.email == login_email)
+                ).first()
+
+                if user and user.bloqueado_ate and user.bloqueado_ate > agora:
+                    segundos = int((user.bloqueado_ate - agora).total_seconds())
+                    st.error(
+                        f"Acesso temporariamente bloqueado. Tente novamente em aproximadamente {max(segundos, 1)}s."
+                    )
+                else:
+                    if user and user.bloqueado_ate and user.bloqueado_ate <= agora:
+                        user.bloqueado_ate = None
+                        user.tentativas_login = 0
+
+                    autenticado_ok = (
+                        user is not None
+                        and int(user.ativo or 0) == 1
+                        and verify_password(senha_input, user.senha)
+                    )
+
+                    if autenticado_ok:
+                        user.tentativas_login = 0
+                        user.bloqueado_ate = None
+                        user.ultimo_login = agora
+
+                        # Compatibilidade com contas antigas criadas antes da V8.
+                        if verify_password("PRIMEIROACESSO", user.senha):
+                            user.must_change_password = 1
+
+                        # Migração transparente: bcrypt legado -> Argon2id.
+                        if password_needs_rehash(user.senha):
+                            user.senha = hash_password(senha_input)
+
+                        registrar_auditoria(
+                            session,
+                            user.empresa_id,
+                            user.id,
+                            "LOGIN_SUCESSO",
+                            "Usuario",
+                            user.id,
+                            f"Ambiente: {APP_ENV}; método: {'email' if login_email and user.email == login_email else 'usuario'}",
                         )
+                        session.commit()
+
+                        # Apenas usuário/e-mail é lembrado. A sessão continua sujeita ao timeout normal.
+                        persistir_identificador_lembrado(
+                            user.email if (login_email and user.email == login_email) else user.login,
+                            lembrar_identificador,
+                        )
+
+                        st.session_state.update({
+                            "autenticado": True,
+                            "usuario_id": user.id,
+                            "empresa_id": int(user.empresa_id),
+                            "nome": user.nome,
+                            "login": user.login,
+                            "email": user.email,
+                            "perfil": user.perfil,
+                            "forcar_troca_senha": bool(user.must_change_password),
+                            "privacidade_pendente": user.privacidade_versao_aceita != PRIVACY_VERSION,
+                            "privacidade_dialog_suspenso": False,
+                            "privacidade_rever": False,
+                            "ultima_atividade_ts": time.time(),
+                            "ultimo_menu": "Painel Gerencial",
+                            "tela_config": False,
+                        })
+                        st.rerun()
                     else:
-                        if user and user.bloqueado_ate and user.bloqueado_ate <= agora:
-                            user.bloqueado_ate = None
-                            user.tentativas_login = 0
-
-                        autenticado_ok = (
-                            user is not None
-                            and int(user.ativo or 0) == 1
-                            and verify_password(senha_input, user.senha)
-                        )
-
-                        if autenticado_ok:
-                            user.tentativas_login = 0
-                            user.bloqueado_ate = None
-                            user.ultimo_login = agora
-
-                            # Compatibilidade com contas antigas criadas antes da V8.
-                            if verify_password("PRIMEIROACESSO", user.senha):
-                                user.must_change_password = 1
-
-                            # Migração transparente: bcrypt legado -> Argon2id.
-                            if password_needs_rehash(user.senha):
-                                user.senha = hash_password(senha_input)
-
+                        # O bloqueio é persistido por usuário, não por session_state/navegador.
+                        if user:
+                            user.tentativas_login = int(user.tentativas_login or 0) + 1
+                            if user.tentativas_login >= LOGIN_MAX_ATTEMPTS:
+                                user.bloqueado_ate = agora + timedelta(minutes=LOGIN_BLOCK_MINUTES)
+                                user.tentativas_login = LOGIN_MAX_ATTEMPTS
                             registrar_auditoria(
                                 session,
                                 user.empresa_id,
                                 user.id,
-                                "LOGIN_SUCESSO",
+                                "LOGIN_FALHA",
                                 "Usuario",
                                 user.id,
-                                f"Ambiente: {APP_ENV}",
+                                "Credencial inválida ou usuário inativo",
                             )
                             session.commit()
-
-                            st.session_state.update({
-                                "autenticado": True,
-                                "usuario_id": user.id,
-                                "empresa_id": int(user.empresa_id),
-                                "nome": user.nome,
-                                "login": user.login,
-                                "perfil": user.perfil,
-                                "forcar_troca_senha": bool(user.must_change_password),
-                                "privacidade_pendente": user.privacidade_versao_aceita != PRIVACY_VERSION,
-                                "privacidade_dialog_suspenso": False,
-                                "privacidade_rever": False,
-                                "ultima_atividade_ts": time.time(),
-                                "ultimo_menu": "Painel Gerencial",
-                                "tela_config": False,
-                            })
-                            st.rerun()
                         else:
-                            # O bloqueio é persistido por usuário, não por session_state/navegador.
-                            if user:
-                                user.tentativas_login = int(user.tentativas_login or 0) + 1
-                                if user.tentativas_login >= LOGIN_MAX_ATTEMPTS:
-                                    user.bloqueado_ate = agora + timedelta(minutes=LOGIN_BLOCK_MINUTES)
-                                    user.tentativas_login = LOGIN_MAX_ATTEMPTS
-                                registrar_auditoria(
-                                    session,
-                                    user.empresa_id,
-                                    user.id,
-                                    "LOGIN_FALHA",
-                                    "Usuario",
-                                    user.id,
-                                    "Credencial inválida ou usuário inativo",
-                                )
-                                session.commit()
-                            else:
-                                # Pequeno atraso reduz a utilidade de enumeração/tentativas em massa.
-                                time.sleep(0.5)
-                            st.error("Credenciais inválidas ou acesso indisponível.")
-                except Exception:
-                    session.rollback()
-                    logger.exception("Falha inesperada na autenticação")
-                    st.error("Não foi possível concluir a autenticação. Tente novamente.", icon=None)
-                finally:
-                    session.close()
+                            # Pequeno atraso reduz a utilidade de enumeração/tentativas em massa.
+                            time.sleep(0.5)
+                        st.error("Credenciais inválidas ou acesso indisponível.")
+            except Exception:
+                session.rollback()
+                logger.exception("Falha inesperada na autenticação")
+                st.error("Não foi possível concluir a autenticação. Tente novamente.", icon=None)
+            finally:
+                session.close()
+
+        st.markdown(
+            """
+            <div class="kineo-login-exclusive">
+                <strong>🔐 Acesso exclusivo</strong>
+                Este sistema é exclusivo para clientes e parceiros autorizados.
+                Para obter acesso, entre em contato com o administrador da sua empresa.
+            </div>
+            <div class="kineo-login-footer">
+                © 2026 Kineo Gestão de Frotas. Todos os direitos reservados.
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+        st.markdown('<div class="kineo-login-legal-label">Informações legais</div>', unsafe_allow_html=True)
+        legal_priv, legal_termos = st.columns(2)
+        with legal_priv:
+            if st.button(
+                "Política de Privacidade",
+                type="tertiary",
+                use_container_width=True,
+                key="login_politica_privacidade",
+            ):
+                politica_login_dialog()
+        with legal_termos:
+            if st.button(
+                "Termos de Uso",
+                type="tertiary",
+                use_container_width=True,
+                key="login_termos_uso",
+            ):
+                termos_login_dialog()
 
 # ══════════════════════════════════════════════════════════════════════════════
 # 2 · TROCA DE SENHA OBRIGATÓRIA

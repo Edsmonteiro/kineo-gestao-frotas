@@ -203,6 +203,9 @@ class Usuario(Base):
     empresa_id = Column(Integer, ForeignKey("empresas.id"), default=1, nullable=False, index=True)
     nome = Column(String, nullable=False)
     login = Column(String, unique=True, nullable=False, index=True)
+    # V10.3: e-mail pertence ao mesmo registro/tenant do usuário.
+    # Permanece nullable para compatibilidade com contas legadas até o cadastro administrativo.
+    email = Column(String(254), nullable=True)
     senha = Column(String, nullable=False)
     perfil = Column(String, default="operador")
     ativo = Column(Integer, default=1, nullable=False)
@@ -213,6 +216,17 @@ class Usuario(Base):
     senha_alterada_em = Column(DateTime, nullable=True)
     privacidade_versao_aceita = Column(String, nullable=True)
     privacidade_vista_em = Column(DateTime, nullable=True)
+
+
+# E-mail normalizado em lowercase na aplicação e único globalmente na fase atual.
+# O índice parcial mantém múltiplos NULLs para usuários legados ainda sem e-mail.
+Index(
+    "uq_usuarios_email",
+    Usuario.email,
+    unique=True,
+    sqlite_where=text("email IS NOT NULL"),
+    postgresql_where=text("email IS NOT NULL"),
+)
 
 
 class Veiculo(Base):
@@ -498,6 +512,7 @@ def _garantir_colunas(tabela, necessarias):
 
 def garantir_colunas_usuarios():
     _garantir_colunas("usuarios", {
+        "email": "VARCHAR(254)",
         "ativo": "INTEGER DEFAULT 1",
         "must_change_password": "INTEGER DEFAULT 0",
         "tentativas_login": "INTEGER DEFAULT 0",
@@ -597,6 +612,11 @@ def normalizar_dados_legados():
     try:
         alterou = False
         for user in session.query(Usuario).all():
+            if user.email:
+                email_normalizado = str(user.email).strip().lower()
+                if email_normalizado != user.email:
+                    user.email = email_normalizado or None
+                    alterou = True
             if user.ativo is None:
                 user.ativo = 1
                 alterou = True
@@ -688,7 +708,7 @@ def validar_schema_gerenciado():
         "usuarios": {
             "ativo", "must_change_password", "tentativas_login", "bloqueado_ate",
             "ultimo_login", "senha_alterada_em", "privacidade_versao_aceita",
-            "privacidade_vista_em",
+            "privacidade_vista_em", "email",
         },
         "veiculos": {"ativo"},
         "custos": {"contrato_id", "motorista_id"},
@@ -729,6 +749,7 @@ def validar_schema_gerenciado():
                 problemas.append(f"{tabela}.{coluna}: tipo financeiro deve ser NUMERIC/DECIMAL")
 
     indices_obrigatorios = {
+        "usuarios": {"uq_usuarios_email"},
         "veiculos": {"uq_veiculos_empresa_placa"},
         "cobrancas_mensais": {
             "uq_cobrancas_recorrente_competencia",
@@ -762,8 +783,8 @@ def validar_schema_gerenciado():
 
     if problemas:
         raise RuntimeError(
-            "Banco de homologação/produção ainda não foi migrado/validado para o hardening V10. "
-            "Execute as migrations V8.1, V9 e V10 na ordem antes do deploy. Detalhes: " + " | ".join(problemas)
+            "Banco de homologação/produção ainda não foi migrado/validado para o schema V10.3. "
+            "Execute as migrations V8.1, V9, V10 e V10.3 na ordem antes do deploy. Detalhes: " + " | ".join(problemas)
         )
 
 
