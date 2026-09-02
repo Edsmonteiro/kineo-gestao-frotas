@@ -524,6 +524,24 @@ def garantir_colunas_usuarios():
     })
 
 
+def garantir_indice_tenant_usuarios_sqlite():
+    """Atualiza bancos SQLite legados para a FK composta de auditoria.
+
+    A aplicação só executa esta correção estrutural no modo de migração local.
+    Ambientes gerenciados continuam usando migrations controladas.
+    """
+    if engine.dialect.name != "sqlite":
+        return
+    inspector = inspect(engine)
+    if "usuarios" not in inspector.get_table_names():
+        return
+    with engine.begin() as conn:
+        conn.execute(text(
+            "CREATE UNIQUE INDEX IF NOT EXISTS uq_usuarios_empresa_id "
+            "ON usuarios (empresa_id, id)"
+        ))
+
+
 def garantir_colunas_contratos():
     _garantir_colunas("contratos", {
         "empresa_id": "INTEGER DEFAULT 1",
@@ -826,6 +844,7 @@ def inicializar_dados():
 if AUTO_MIGRATE:
     Base.metadata.create_all(bind=engine)
     garantir_colunas_usuarios()
+    garantir_indice_tenant_usuarios_sqlite()
     garantir_colunas_contratos()
     garantir_colunas_substituicoes()
     garantir_colunas_veiculos()

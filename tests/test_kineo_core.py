@@ -1,6 +1,6 @@
 import pytest
 
-from kineo_core import email_valido, normalizar_email
+from kineo_core import email_valido, normalizar_email, parse_valor_monetario_br
 
 
 @pytest.mark.parametrize(
@@ -61,3 +61,18 @@ def test_limite_de_254_caracteres():
     assert len(email_255) == 255
     assert email_valido(email_254) is True
     assert email_valido(email_255) is False
+
+
+@pytest.mark.parametrize(
+    ("entrada", "esperado"),
+    [
+        ("1.012,08", 1012.08),
+        ("R$ 1.012,08", 1012.08),
+        ("1012.08", 1012.08),
+        ("1.012", 1012.0),
+        ("", 0.0),
+        ("invalido", 0.0),
+    ],
+)
+def test_parse_valor_monetario_br(entrada, esperado):
+    assert parse_valor_monetario_br(entrada) == esperado
