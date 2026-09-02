@@ -131,15 +131,40 @@ def persistir_identificador_lembrado(identificador, lembrar):
                 "return 'ok';"
                 "})()"
             )
+        # Escrita é side-effect apenas: não devolvemos valor ao Python.
+        # Isso evita o rerun assíncrono do custom component após o submit do login.
+        expr = "setFrameHeight(0);" + expr
         streamlit_js_eval(
             js_expressions=expr,
-            want_output=True,
-            key=f"kineo_login_remember_write_{uuid.uuid4().hex}",
+            want_output=False,
+            key="kineo_login_remember_write",
         )
         return True
     except Exception:
         logger.exception("Falha ao persistir identificador lembrado no navegador")
         return False
+
+
+def processar_persistencia_login_pendente():
+    """Executa a escrita no localStorage fora do ciclo do botão de login.
+
+    Custom components podem provocar reruns/artefatos quando criados dentro do
+    branch de um submit. Por isso o login apenas agenda a operação e o primeiro
+    ciclo já autenticado executa o side-effect sem retorno ao Python.
+    """
+    if not st.session_state.get("autenticado"):
+        return
+
+    pendente = st.session_state.get("login_remember_pending")
+    if not isinstance(pendente, dict):
+        return
+
+    # Limpa antes de montar o componente para garantir execução única.
+    st.session_state["login_remember_pending"] = None
+    persistir_identificador_lembrado(
+        pendente.get("identificador", ""),
+        bool(pendente.get("lembrar")),
+    )
 
 
 def login_frota_data_uri():
@@ -636,6 +661,7 @@ for key, default in [
     ("credencial_temporaria", None),
     ("login_identifier_prefill", ""),
     ("login_remember_loaded", False),
+    ("login_remember_pending", None),
     ("uploader_key", 0), # Chave para resetar o uploader de planilhas
     ("custos_uploader_version", 0), # Chave para limpar o comprovante após registrar despesa
     ("recorrencias_editor_version", 0),
@@ -3407,6 +3433,10 @@ else:
     termos_login_dialog = _conteudo_termos_login
 
 
+# A escrita de "lembrar usuário/e-mail" é processada somente depois que o
+# submit já terminou e a sessão está autenticada, evitando duplicação visual.
+processar_persistencia_login_pendente()
+
 # ══════════════════════════════════════════════════════════════════════════════
 # 1 · TELA DE LOGIN — UX V10.3
 # ══════════════════════════════════════════════════════════════════════════════
@@ -3536,11 +3566,16 @@ if not st.session_state["autenticado"]:
                         )
                         session.commit()
 
-                        # Apenas usuário/e-mail é lembrado. A sessão continua sujeita ao timeout normal.
-                        persistir_identificador_lembrado(
-                            user.email if (login_email and user.email == login_email) else user.login,
-                            lembrar_identificador,
-                        )
+                        # Apenas usuário/e-mail é lembrado. A escrita no navegador
+                        # é adiada para o primeiro ciclo já autenticado, fora do submit.
+                        st.session_state["login_remember_pending"] = {
+                            "identificador": (
+                                user.email
+                                if (login_email and user.email == login_email)
+                                else user.login
+                            ),
+                            "lembrar": bool(lembrar_identificador),
+                        }
 
                         st.session_state.update({
                             "autenticado": True,
