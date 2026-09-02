@@ -84,6 +84,7 @@ def ler_identificador_lembrado():
         return ""
     try:
         expr = (
+            "setFrameHeight(0);"
             f"window.localStorage.getItem({json.dumps(LOGIN_REMEMBER_STORAGE_KEY)}) || ''"
         )
         valor = streamlit_js_eval(
@@ -214,6 +215,19 @@ header[data-testid="stHeader"] { display: none !important; }
 }
 
 .block-container:has(.kineo-login-left) > div { width: 100% !important; }
+
+/* O componente de localStorage é funcional, mas não deve reservar espaço visual. */
+.block-container:has(.kineo-login-left) [data-testid="stCustomComponentV1"],
+.block-container:has(.kineo-login-left) iframe[title*="streamlit_js_eval"] {
+    display: block !important;
+    width: 0 !important;
+    height: 0 !important;
+    min-height: 0 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    border: 0 !important;
+    overflow: hidden !important;
+}
 
 div[data-testid="stHorizontalBlock"]:has(.kineo-login-left) {
     gap: 0 !important;
@@ -2090,17 +2104,17 @@ def aplicar_css_dashboard_v11():
 <style>
 .block-container:has(.kineo-dashboard-v11) {
     max-width: 1600px;
-    padding-top: 1.35rem;
-    padding-bottom: 2.5rem;
+    padding-top: .65rem;
+    padding-bottom: 2rem;
 }
 
 .kineo-dashboard-hero {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 28px;
-    margin-bottom: 24px;
-    padding: 28px 30px;
+    gap: 22px;
+    margin-bottom: 14px;
+    padding: 18px 24px;
     border: 1px solid #D8E6F7;
     border-radius: 22px;
     background:
@@ -2110,9 +2124,9 @@ def aplicar_css_dashboard_v11():
 }
 
 .kineo-dashboard-hero h1 {
-    margin: 5px 0 7px;
+    margin: 3px 0 5px;
     color: #0D2A56;
-    font-size: clamp(1.65rem, 2.35vw, 2.35rem);
+    font-size: clamp(1.5rem, 2vw, 2rem);
     line-height: 1.1;
     letter-spacing: -.045em;
 }
@@ -2121,8 +2135,8 @@ def aplicar_css_dashboard_v11():
     max-width: 760px;
     margin: 0;
     color: #5F7290;
-    font-size: .94rem;
-    line-height: 1.55;
+    font-size: .86rem;
+    line-height: 1.4;
 }
 
 .kineo-dashboard-eyebrow {
@@ -2134,8 +2148,8 @@ def aplicar_css_dashboard_v11():
 }
 
 .kineo-dashboard-period {
-    min-width: 185px;
-    padding: 14px 17px;
+    min-width: 175px;
+    padding: 11px 14px;
     border: 1px solid rgba(23, 104, 229, .15);
     border-radius: 15px;
     background: rgba(255, 255, 255, .72);
@@ -2166,7 +2180,7 @@ def aplicar_css_dashboard_v11():
     align-items: end;
     justify-content: space-between;
     gap: 16px;
-    margin: 4px 0 12px;
+    margin: 2px 0 8px;
 }
 
 .kineo-section-heading h2 {
@@ -2183,8 +2197,8 @@ def aplicar_css_dashboard_v11():
 }
 
 .kineo-kpi-card {
-    min-height: 150px;
-    padding: 19px;
+    min-height: 112px;
+    padding: 14px 15px;
     border: 1px solid #E0E9F4;
     border-radius: 18px;
     background: #FFFFFF;
@@ -2206,8 +2220,8 @@ def aplicar_css_dashboard_v11():
 
 .kineo-kpi-icon {
     display: grid;
-    width: 35px;
-    height: 35px;
+    width: 30px;
+    height: 30px;
     place-items: center;
     border-radius: 11px;
     font-size: .84rem;
@@ -2221,7 +2235,7 @@ def aplicar_css_dashboard_v11():
 .kineo-kpi-icon.amber { color: #A96505; background: #FFF3DB; }
 
 .kineo-kpi-value {
-    margin-top: 17px;
+    margin-top: 8px;
     color: #102E55;
     font-size: clamp(1.25rem, 1.75vw, 1.72rem);
     font-weight: 820;
@@ -2230,15 +2244,15 @@ def aplicar_css_dashboard_v11():
 }
 
 .kineo-kpi-detail {
-    margin-top: 9px;
+    margin-top: 5px;
     color: #7A899D;
     font-size: .7rem;
     line-height: 1.35;
 }
 
 .kineo-mini-stat {
-    min-height: 82px;
-    padding: 15px 16px;
+    min-height: 62px;
+    padding: 10px 13px;
     border: 1px solid #E5ECF5;
     border-radius: 15px;
     background: #F9FBFE;
@@ -2247,7 +2261,7 @@ def aplicar_css_dashboard_v11():
 .kineo-mini-stat span,
 .kineo-mini-stat strong { display: block; }
 .kineo-mini-stat span { color: #738198; font-size: .7rem; font-weight: 650; }
-.kineo-mini-stat strong { margin-top: 5px; color: #17385F; font-size: 1.25rem; }
+.kineo-mini-stat strong { margin-top: 3px; color: #17385F; font-size: 1.08rem; }
 
 .kineo-alert-card,
 .kineo-ok-card {
@@ -4842,7 +4856,7 @@ else:
                     "em multa e juros de cobranças recebidas em atraso."
                 )
 
-            st.markdown("<div style='height:10px'></div>", unsafe_allow_html=True)
+            st.markdown("<div style='height:4px'></div>", unsafe_allow_html=True)
 
             m1, m2, m3, m4, m5 = st.columns(5)
             with m1:
@@ -4857,7 +4871,7 @@ else:
                 dashboard_mini_stat("Reservas em uso", reservas_em_uso)
 
             # ── Alertas executivos ────────────────────────────────────────────────
-            st.markdown("<div style='height:18px'></div>", unsafe_allow_html=True)
+            st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
             st.markdown(
                 """
                 <div class="kineo-section-heading">
@@ -4888,7 +4902,7 @@ else:
                 )
 
             # ── Visão analítica principal ─────────────────────────────────────────
-            st.markdown("<div style='height:18px'></div>", unsafe_allow_html=True)
+            st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
             col_fin, col_frota = st.columns([1.55, 1])
 
             with col_fin:
@@ -5050,7 +5064,7 @@ else:
                         st.info("Nenhum veículo cadastrado.", icon=None)
 
             # ── Contratos e saúde da frota ────────────────────────────────────────
-            st.markdown("<div style='height:18px'></div>", unsafe_allow_html=True)
+            st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
             col_contratos, col_saude = st.columns([1, 1])
 
             with col_contratos:
@@ -5102,7 +5116,7 @@ else:
                         st.success("Nenhum alerta crítico de manutenção.", icon=None)
 
             # ── Custos e atalhos ──────────────────────────────────────────────────
-            st.markdown("<div style='height:18px'></div>", unsafe_allow_html=True)
+            st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
             col_custos, col_acoes = st.columns([1.55, 1])
 
             with col_custos:
