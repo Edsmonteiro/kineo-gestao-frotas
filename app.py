@@ -9692,102 +9692,103 @@ else:
                     st.warning("Não há veículo disponível para abertura de novo contrato.", icon=None)
                 else:
                     with st.container(border=True):
-                        opcoes_v = {f"{r['modelo']} ({r['placa']})": int(r['id']) for _, r in disponiveis_novo.iterrows()}
-                        veiculo_sel = st.selectbox("Ativo a ser alocado", list(opcoes_v.keys()), key="nc_v")
+                        with st.form("form_novo_contrato", clear_on_submit=True):
+                            opcoes_v = {f"{r['modelo']} ({r['placa']})": int(r['id']) for _, r in disponiveis_novo.iterrows()}
+                            veiculo_sel = st.selectbox("Ativo a ser alocado", list(opcoes_v.keys()), key="nc_v")
 
-                        ca, cb = st.columns(2)
-                        cliente = ca.text_input("Locatário (Razão Social)", key="nc_cliente")
-                        cnpj = cb.text_input("Documento (CNPJ/CPF)", key="nc_cnpj")
-                        cc, cd = st.columns(2)
-                        d_inicio = cc.date_input("Início da Vigência", format="DD/MM/YYYY", key="nc_inicio")
-                        km_ini = cd.number_input("Odômetro de Saída", min_value=0.0, step=50.0, value=0.0, key="nc_km_ini")
+                            ca, cb = st.columns(2)
+                            cliente = ca.text_input("Locatário (Razão Social)", key="nc_cliente")
+                            cnpj = cb.text_input("Documento (CNPJ/CPF)", key="nc_cnpj")
+                            cc, cd = st.columns(2)
+                            d_inicio = cc.date_input("Início da Vigência", format="DD/MM/YYYY", key="nc_inicio")
+                            km_ini = cd.number_input("Odômetro de Saída", min_value=0.0, step=50.0, value=0.0, key="nc_km_ini")
 
-                        st.markdown("---")
-                        st.markdown("**Acordo Comercial**")
-                        ce, cf = st.columns(2)
-                        tipo_v = ce.selectbox("Formato de Receita", ["Fixo", "Variável"], key="nc_tipo")
-                        valor_m = 0.0
-                        comp_var_novo = None
-                        valor_comp_var_novo = 0.0
-                        valor_comp_var_novo_txt = ""
+                            st.markdown("---")
+                            st.markdown("**Acordo Comercial**")
+                            ce, cf = st.columns(2)
+                            tipo_v = ce.selectbox("Formato de Receita", ["Fixo", "Variável"], key="nc_tipo")
+                            valor_m = 0.0
+                            comp_var_novo = None
+                            valor_comp_var_novo = 0.0
+                            valor_comp_var_novo_txt = ""
 
-                        if tipo_v == "Fixo":
-                            valor_m_txt = cf.text_input(
-                                "Mensalidade (R$)",
-                                value="",
-                                placeholder="Ex.: 52.800,00",
-                                key="nc_valor"
-                            )
-                            valor_m = parse_valor_cobranca(valor_m_txt)
-                        else:
-                            cf.info("Receita variável: não existe mensalidade fixa no contrato.")
-                            cv1, cv2 = st.columns(2)
-                            competencias_var = opcoes_competencias(12, 18)
-                            comp_padrao = hoje_local().strftime("%m/%Y")
-                            idx_comp = competencias_var.index(comp_padrao) if comp_padrao in competencias_var else 12
-                            comp_var_novo = cv1.selectbox(
-                                "Mês de referência",
-                                competencias_var,
-                                index=idx_comp,
-                                key="nc_comp_var"
-                            )
-                            valor_comp_var_novo_txt = cv2.text_input(
-                                "Valor previsto da competência (R$)",
-                                value="",
-                                placeholder="Ex.: 52.800,00",
-                                key="nc_valor_comp_var"
-                            )
-                            valor_comp_var_novo = parse_valor_cobranca(valor_comp_var_novo_txt)
-                            st.caption(
-                                "Esse valor será registrado no Controle Mensal da competência selecionada. "
-                                "Se ainda não houver regra de cobrança recorrente, ela poderá ser completada depois."
-                            )
-                        cg, ch = st.columns(2)
-                        multa_c = cg.number_input("Cláusula de Atraso - Multa (%)", min_value=0.0, step=1.0, value=2.0, key="nc_multa")
-                        juros_c = ch.number_input("Cláusula de Atraso - Juros/Mês (%)", min_value=0.0, step=0.1, value=1.0, key="nc_juros")
-
-                        if st.button("Efetivar Alocação", use_container_width=True, key="btn_novo_contrato"):
-                            if not cliente.strip():
-                                st.error("Identificação do Locatário obrigatória.", icon=None)
+                            if tipo_v == "Fixo":
+                                valor_m_txt = cf.text_input(
+                                    "Mensalidade (R$)",
+                                    value="",
+                                    placeholder="Ex.: 52.800,00",
+                                    key="nc_valor"
+                                )
+                                valor_m = parse_valor_cobranca(valor_m_txt)
                             else:
-                                session = SessionLocal()
-                                try:
-                                    veiculo = tenant_get(session, Veiculo, opcoes_v[veiculo_sel], emp_id)
-                                    if veiculo is None or veiculo.status != "Disponível":
-                                        raise ValueError("O veículo selecionado não está mais disponível.")
+                                cf.info("Receita variável: não existe mensalidade fixa no contrato.")
+                                cv1, cv2 = st.columns(2)
+                                competencias_var = opcoes_competencias(12, 18)
+                                comp_padrao = hoje_local().strftime("%m/%Y")
+                                idx_comp = competencias_var.index(comp_padrao) if comp_padrao in competencias_var else 12
+                                comp_var_novo = cv1.selectbox(
+                                    "Mês de referência",
+                                    competencias_var,
+                                    index=idx_comp,
+                                    key="nc_comp_var"
+                                )
+                                valor_comp_var_novo_txt = cv2.text_input(
+                                    "Valor previsto da competência (R$)",
+                                    value="",
+                                    placeholder="Ex.: 52.800,00",
+                                    key="nc_valor_comp_var"
+                                )
+                                valor_comp_var_novo = parse_valor_cobranca(valor_comp_var_novo_txt)
+                                st.caption(
+                                    "Esse valor será registrado no Controle Mensal da competência selecionada. "
+                                    "Se ainda não houver regra de cobrança recorrente, ela poderá ser completada depois."
+                                )
+                            cg, ch = st.columns(2)
+                            multa_c = cg.number_input("Cláusula de Atraso - Multa (%)", min_value=0.0, step=1.0, value=2.0, key="nc_multa")
+                            juros_c = ch.number_input("Cláusula de Atraso - Juros/Mês (%)", min_value=0.0, step=0.1, value=1.0, key="nc_juros")
 
-                                    contrato = Contrato(
-                                        empresa_id=emp_id, veiculo_id=veiculo.id, cliente=cliente.strip(), cnpj=cnpj.strip(),
-                                        data_inicio=d_inicio, data_fim=None, km_inicial=km_ini, km_final=0.0, ativo=1,
-                                        usuario_lancamento=st.session_state["nome"], tipo_valor=tipo_v,
-                                        valor_mensal=decimal_monetario(valor_m) if tipo_v == "Fixo" else Decimal("0.00"), multa=multa_c, juros=juros_c
-                                    )
-                                    session.add(contrato)
-                                    session.flush()
-                                    if tipo_v == "Variável" and valor_comp_var_novo_txt.strip():
-                                        salvar_valor_variavel_competencia(
-                                            session, emp_id, contrato, comp_var_novo, valor_comp_var_novo
+                            if st.form_submit_button("Efetivar Alocação", use_container_width=True):
+                                if not cliente.strip():
+                                    st.error("Identificação do Locatário obrigatória.", icon=None)
+                                else:
+                                    session = SessionLocal()
+                                    try:
+                                        veiculo = tenant_get(session, Veiculo, opcoes_v[veiculo_sel], emp_id)
+                                        if veiculo is None or veiculo.status != "Disponível":
+                                            raise ValueError("O veículo selecionado não está mais disponível.")
+
+                                        contrato = Contrato(
+                                            empresa_id=emp_id, veiculo_id=veiculo.id, cliente=cliente.strip(), cnpj=cnpj.strip(),
+                                            data_inicio=d_inicio, data_fim=None, km_inicial=km_ini, km_final=0.0, ativo=1,
+                                            usuario_lancamento=st.session_state["nome"], tipo_valor=tipo_v,
+                                            valor_mensal=decimal_monetario(valor_m) if tipo_v == "Fixo" else Decimal("0.00"), multa=multa_c, juros=juros_c
                                         )
-                                        registrar_auditoria(
-                                            session, emp_id, st.session_state["usuario_id"],
-                                            "VALOR_VARIAVEL_COMPETENCIA", "Contrato", contrato.id,
-                                            f"Competência {comp_var_novo}; valor {valor_comp_var_novo:.2f}"
-                                        )
-                                    veiculo.status = "Alugado"
-                                    session.commit()
-                                    st.cache_data.clear()
-                                    st.success("Contrato consolidado na base!")
-                                    time.sleep(0.7)
-                                    st.rerun()
-                                except ValueError as e:
-                                    session.rollback()
-                                    st.error(str(e), icon=None)
-                                except Exception:
-                                    session.rollback()
-                                    logger.exception("Falha em operação de contrato")
-                                    st.error("Não foi possível concluir a operação.", icon=None)
-                                finally:
-                                    session.close()
+                                        session.add(contrato)
+                                        session.flush()
+                                        if tipo_v == "Variável" and valor_comp_var_novo_txt.strip():
+                                            salvar_valor_variavel_competencia(
+                                                session, emp_id, contrato, comp_var_novo, valor_comp_var_novo
+                                            )
+                                            registrar_auditoria(
+                                                session, emp_id, st.session_state["usuario_id"],
+                                                "VALOR_VARIAVEL_COMPETENCIA", "Contrato", contrato.id,
+                                                f"Competência {comp_var_novo}; valor {valor_comp_var_novo:.2f}"
+                                            )
+                                        veiculo.status = "Alugado"
+                                        session.commit()
+                                        st.cache_data.clear()
+                                        st.success("Contrato consolidado na base!")
+                                        time.sleep(0.7)
+                                        st.rerun()
+                                    except ValueError as e:
+                                        session.rollback()
+                                        st.error(str(e), icon=None)
+                                    except Exception:
+                                        session.rollback()
+                                        logger.exception("Falha em operação de contrato")
+                                        st.error("Não foi possível concluir a operação.", icon=None)
+                                    finally:
+                                        session.close()
 
             # ── Aba 3: Editar / Encerrar Contrato ─────────────────────────────────
             with tab_editar:
