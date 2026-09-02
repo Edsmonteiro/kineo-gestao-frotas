@@ -25,6 +25,7 @@ from sqlalchemy import text as sql_text
 from sqlalchemy.exc import IntegrityError
 from zoneinfo import ZoneInfo
 from decimal import Decimal, ROUND_HALF_UP, ROUND_DOWN
+from kineo_core import email_valido, normalizar_email
 
 try:
     import boto3
@@ -77,25 +78,13 @@ def formatar_serie_datetime_local(serie, formato="%d/%m/%Y %H:%M"):
 
 # ─── IDENTIDADE / LOGIN V10.3 ────────────────────────────────────────────────
 LOGIN_REMEMBER_STORAGE_KEY = "kineo_login_identifier_v1"
-EMAIL_PATTERN = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
-
-
-def normalizar_email(valor):
-    """Normaliza e-mail para busca/armazenamento sem alterar usuários legados sem e-mail."""
-    return str(valor or "").strip().lower()
-
-
-def email_valido(valor):
-    email = normalizar_email(valor)
-    return bool(email and len(email) <= 254 and EMAIL_PATTERN.fullmatch(email))
-
-
 def ler_identificador_lembrado():
     """Lê somente o identificador salvo no localStorage. Nunca armazena senha/token/sessão."""
     if not STREAMLIT_JS_EVAL_DISPONIVEL:
         return ""
     try:
         expr = (
+            "setFrameHeight(0);"
             f"window.localStorage.getItem({json.dumps(LOGIN_REMEMBER_STORAGE_KEY)}) || ''"
         )
         valor = streamlit_js_eval(
@@ -191,6 +180,12 @@ def aplicar_css_login():
 [data-testid="stSidebar"] { display: none !important; }
 [data-testid="collapsedControl"] { display: none !important; }
 header[data-testid="stHeader"] { display: none !important; }
+[data-testid="stDecoration"],
+[data-testid="stStatusWidget"] { display: none !important; }
+
+[data-testid="stMain"] {
+    min-height: 100dvh !important;
+}
 
 [data-testid="stAppViewContainer"] {
     background: linear-gradient(135deg, #E9F1FC 0%, #F7FAFF 55%, #E7F0FC 100%) !important;
@@ -220,6 +215,19 @@ header[data-testid="stHeader"] { display: none !important; }
 }
 
 .block-container:has(.kineo-login-left) > div { width: 100% !important; }
+
+/* O componente de localStorage é funcional, mas não deve reservar espaço visual. */
+.block-container:has(.kineo-login-left) [data-testid="stCustomComponentV1"],
+.block-container:has(.kineo-login-left) iframe[title*="streamlit_js_eval"] {
+    display: block !important;
+    width: 0 !important;
+    height: 0 !important;
+    min-height: 0 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    border: 0 !important;
+    overflow: hidden !important;
+}
 
 div[data-testid="stHorizontalBlock"]:has(.kineo-login-left) {
     gap: 0 !important;
@@ -2096,17 +2104,17 @@ def aplicar_css_dashboard_v11():
 <style>
 .block-container:has(.kineo-dashboard-v11) {
     max-width: 1600px;
-    padding-top: 1.35rem;
-    padding-bottom: 2.5rem;
+    padding-top: .65rem;
+    padding-bottom: 2rem;
 }
 
 .kineo-dashboard-hero {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 28px;
-    margin-bottom: 24px;
-    padding: 28px 30px;
+    gap: 22px;
+    margin-bottom: 14px;
+    padding: 18px 24px;
     border: 1px solid #D8E6F7;
     border-radius: 22px;
     background:
@@ -2116,9 +2124,9 @@ def aplicar_css_dashboard_v11():
 }
 
 .kineo-dashboard-hero h1 {
-    margin: 5px 0 7px;
+    margin: 3px 0 5px;
     color: #0D2A56;
-    font-size: clamp(1.65rem, 2.35vw, 2.35rem);
+    font-size: clamp(1.5rem, 2vw, 2rem);
     line-height: 1.1;
     letter-spacing: -.045em;
 }
@@ -2127,8 +2135,8 @@ def aplicar_css_dashboard_v11():
     max-width: 760px;
     margin: 0;
     color: #5F7290;
-    font-size: .94rem;
-    line-height: 1.55;
+    font-size: .86rem;
+    line-height: 1.4;
 }
 
 .kineo-dashboard-eyebrow {
@@ -2140,8 +2148,8 @@ def aplicar_css_dashboard_v11():
 }
 
 .kineo-dashboard-period {
-    min-width: 185px;
-    padding: 14px 17px;
+    min-width: 175px;
+    padding: 11px 14px;
     border: 1px solid rgba(23, 104, 229, .15);
     border-radius: 15px;
     background: rgba(255, 255, 255, .72);
@@ -2172,7 +2180,7 @@ def aplicar_css_dashboard_v11():
     align-items: end;
     justify-content: space-between;
     gap: 16px;
-    margin: 4px 0 12px;
+    margin: 2px 0 8px;
 }
 
 .kineo-section-heading h2 {
@@ -2189,8 +2197,8 @@ def aplicar_css_dashboard_v11():
 }
 
 .kineo-kpi-card {
-    min-height: 150px;
-    padding: 19px;
+    min-height: 112px;
+    padding: 14px 15px;
     border: 1px solid #E0E9F4;
     border-radius: 18px;
     background: #FFFFFF;
@@ -2212,8 +2220,8 @@ def aplicar_css_dashboard_v11():
 
 .kineo-kpi-icon {
     display: grid;
-    width: 35px;
-    height: 35px;
+    width: 30px;
+    height: 30px;
     place-items: center;
     border-radius: 11px;
     font-size: .84rem;
@@ -2227,7 +2235,7 @@ def aplicar_css_dashboard_v11():
 .kineo-kpi-icon.amber { color: #A96505; background: #FFF3DB; }
 
 .kineo-kpi-value {
-    margin-top: 17px;
+    margin-top: 8px;
     color: #102E55;
     font-size: clamp(1.25rem, 1.75vw, 1.72rem);
     font-weight: 820;
@@ -2236,15 +2244,15 @@ def aplicar_css_dashboard_v11():
 }
 
 .kineo-kpi-detail {
-    margin-top: 9px;
+    margin-top: 5px;
     color: #7A899D;
     font-size: .7rem;
     line-height: 1.35;
 }
 
 .kineo-mini-stat {
-    min-height: 82px;
-    padding: 15px 16px;
+    min-height: 62px;
+    padding: 10px 13px;
     border: 1px solid #E5ECF5;
     border-radius: 15px;
     background: #F9FBFE;
@@ -2253,7 +2261,7 @@ def aplicar_css_dashboard_v11():
 .kineo-mini-stat span,
 .kineo-mini-stat strong { display: block; }
 .kineo-mini-stat span { color: #738198; font-size: .7rem; font-weight: 650; }
-.kineo-mini-stat strong { margin-top: 5px; color: #17385F; font-size: 1.25rem; }
+.kineo-mini-stat strong { margin-top: 3px; color: #17385F; font-size: 1.08rem; }
 
 .kineo-alert-card,
 .kineo-ok-card {
@@ -4016,14 +4024,17 @@ if not st.session_state["autenticado"]:
 
     # O componente de localStorage retorna de forma assíncrona e pode provocar um rerun.
     # Apenas o identificador é lembrado; senha, tenant e tokens nunca são persistidos aqui.
-    if not st.session_state.get("login_remember_loaded", False):
-        lembrado = ler_identificador_lembrado()
-        if STREAMLIT_JS_EVAL_DISPONIVEL:
-            # Quando o componente já retornou (inclusive string vazia), marca como carregado.
-            # Na primeira renderização ele pode retornar None e então o próprio componente reroda.
-            if lembrado is not None:
-                st.session_state["login_identifier_prefill"] = lembrado
-                st.session_state["login_remember_loaded"] = True
+    # Mantém o componente na mesma posição da árvore visual em todos os reruns.
+    # Removê-lo depois da primeira leitura deslocava os elementos do formulário e
+    # fazia o Streamlit exibir temporariamente duas cópias da tela no submit.
+    lembrado = ler_identificador_lembrado()
+    if (
+        not st.session_state.get("login_remember_loaded", False)
+        and STREAMLIT_JS_EVAL_DISPONIVEL
+        and lembrado is not None
+    ):
+        st.session_state["login_identifier_prefill"] = lembrado
+        st.session_state["login_remember_loaded"] = True
 
     col_visual, col_login = st.columns([1.08, 0.92])
 
@@ -4085,113 +4096,114 @@ if not st.session_state["autenticado"]:
             )
 
         if submitted:
-            login_digitado = str(usuario_input or "").strip()
-            login_email = normalizar_email(login_digitado)
-            agora = agora_utc()
-            session = SessionLocal()
-            try:
-                # Identidade global nesta fase: usuário OU e-mail único.
-                # O empresa_id é obtido exclusivamente do registro autenticado.
-                user = session.query(Usuario).filter(
-                    (Usuario.login == login_digitado) |
-                    (Usuario.email == login_email)
-                ).first()
-
-                if user and user.bloqueado_ate and user.bloqueado_ate > agora:
-                    segundos = int((user.bloqueado_ate - agora).total_seconds())
-                    st.error(
-                        f"Acesso temporariamente bloqueado. Tente novamente em aproximadamente {max(segundos, 1)}s."
-                    )
-                else:
-                    if user and user.bloqueado_ate and user.bloqueado_ate <= agora:
-                        user.bloqueado_ate = None
-                        user.tentativas_login = 0
-
-                    autenticado_ok = (
-                        user is not None
-                        and int(user.ativo or 0) == 1
-                        and verify_password(senha_input, user.senha)
-                    )
-
-                    if autenticado_ok:
-                        user.tentativas_login = 0
-                        user.bloqueado_ate = None
-                        user.ultimo_login = agora
-
-                        # Compatibilidade com contas antigas criadas antes da V8.
-                        if verify_password("PRIMEIROACESSO", user.senha):
-                            user.must_change_password = 1
-
-                        # Migração transparente: bcrypt legado -> Argon2id.
-                        if password_needs_rehash(user.senha):
-                            user.senha = hash_password(senha_input)
-
-                        registrar_auditoria(
-                            session,
-                            user.empresa_id,
-                            user.id,
-                            "LOGIN_SUCESSO",
-                            "Usuario",
-                            user.id,
-                            f"Ambiente: {APP_ENV}; método: {'email' if login_email and user.email == login_email else 'usuario'}",
+            with st.spinner("Validando seu acesso..."):
+                login_digitado = str(usuario_input or "").strip()
+                login_email = normalizar_email(login_digitado)
+                agora = agora_utc()
+                session = SessionLocal()
+                try:
+                    # Identidade global nesta fase: usuário OU e-mail único.
+                    # O empresa_id é obtido exclusivamente do registro autenticado.
+                    user = session.query(Usuario).filter(
+                        (Usuario.login == login_digitado) |
+                        (Usuario.email == login_email)
+                    ).first()
+    
+                    if user and user.bloqueado_ate and user.bloqueado_ate > agora:
+                        segundos = int((user.bloqueado_ate - agora).total_seconds())
+                        st.error(
+                            f"Acesso temporariamente bloqueado. Tente novamente em aproximadamente {max(segundos, 1)}s."
                         )
-                        session.commit()
-
-                        # Apenas usuário/e-mail é lembrado. A escrita no navegador
-                        # é adiada para o primeiro ciclo já autenticado, fora do submit.
-                        st.session_state["login_remember_pending"] = {
-                            "identificador": (
-                                user.email
-                                if (login_email and user.email == login_email)
-                                else user.login
-                            ),
-                            "lembrar": bool(lembrar_identificador),
-                        }
-
-                        st.session_state.update({
-                            "autenticado": True,
-                            "usuario_id": user.id,
-                            "empresa_id": int(user.empresa_id),
-                            "nome": user.nome,
-                            "login": user.login,
-                            "email": user.email,
-                            "perfil": user.perfil,
-                            "forcar_troca_senha": bool(user.must_change_password),
-                            "privacidade_pendente": user.privacidade_versao_aceita != PRIVACY_VERSION,
-                            "privacidade_dialog_suspenso": False,
-                            "privacidade_rever": False,
-                            "ultima_atividade_ts": time.time(),
-                            "ultimo_menu": "Painel Gerencial",
-                            "tela_config": False,
-                        })
-                        st.rerun()
                     else:
-                        # O bloqueio é persistido por usuário, não por session_state/navegador.
-                        if user:
-                            user.tentativas_login = int(user.tentativas_login or 0) + 1
-                            if user.tentativas_login >= LOGIN_MAX_ATTEMPTS:
-                                user.bloqueado_ate = agora + timedelta(minutes=LOGIN_BLOCK_MINUTES)
-                                user.tentativas_login = LOGIN_MAX_ATTEMPTS
+                        if user and user.bloqueado_ate and user.bloqueado_ate <= agora:
+                            user.bloqueado_ate = None
+                            user.tentativas_login = 0
+    
+                        autenticado_ok = (
+                            user is not None
+                            and int(user.ativo or 0) == 1
+                            and verify_password(senha_input, user.senha)
+                        )
+    
+                        if autenticado_ok:
+                            user.tentativas_login = 0
+                            user.bloqueado_ate = None
+                            user.ultimo_login = agora
+    
+                            # Compatibilidade com contas antigas criadas antes da V8.
+                            if verify_password("PRIMEIROACESSO", user.senha):
+                                user.must_change_password = 1
+    
+                            # Migração transparente: bcrypt legado -> Argon2id.
+                            if password_needs_rehash(user.senha):
+                                user.senha = hash_password(senha_input)
+    
                             registrar_auditoria(
                                 session,
                                 user.empresa_id,
                                 user.id,
-                                "LOGIN_FALHA",
+                                "LOGIN_SUCESSO",
                                 "Usuario",
                                 user.id,
-                                "Credencial inválida ou usuário inativo",
+                                f"Ambiente: {APP_ENV}; método: {'email' if login_email and user.email == login_email else 'usuario'}",
                             )
                             session.commit()
+    
+                            # Apenas usuário/e-mail é lembrado. A escrita no navegador
+                            # é adiada para o primeiro ciclo já autenticado, fora do submit.
+                            st.session_state["login_remember_pending"] = {
+                                "identificador": (
+                                    user.email
+                                    if (login_email and user.email == login_email)
+                                    else user.login
+                                ),
+                                "lembrar": bool(lembrar_identificador),
+                            }
+    
+                            st.session_state.update({
+                                "autenticado": True,
+                                "usuario_id": user.id,
+                                "empresa_id": int(user.empresa_id),
+                                "nome": user.nome,
+                                "login": user.login,
+                                "email": user.email,
+                                "perfil": user.perfil,
+                                "forcar_troca_senha": bool(user.must_change_password),
+                                "privacidade_pendente": user.privacidade_versao_aceita != PRIVACY_VERSION,
+                                "privacidade_dialog_suspenso": False,
+                                "privacidade_rever": False,
+                                "ultima_atividade_ts": time.time(),
+                                "ultimo_menu": "Painel Gerencial",
+                                "tela_config": False,
+                            })
+                            st.rerun()
                         else:
-                            # Pequeno atraso reduz a utilidade de enumeração/tentativas em massa.
-                            time.sleep(0.5)
-                        st.error("Credenciais inválidas ou acesso indisponível.")
-            except Exception:
-                session.rollback()
-                logger.exception("Falha inesperada na autenticação")
-                st.error("Não foi possível concluir a autenticação. Tente novamente.", icon=None)
-            finally:
-                session.close()
+                            # O bloqueio é persistido por usuário, não por session_state/navegador.
+                            if user:
+                                user.tentativas_login = int(user.tentativas_login or 0) + 1
+                                if user.tentativas_login >= LOGIN_MAX_ATTEMPTS:
+                                    user.bloqueado_ate = agora + timedelta(minutes=LOGIN_BLOCK_MINUTES)
+                                    user.tentativas_login = LOGIN_MAX_ATTEMPTS
+                                registrar_auditoria(
+                                    session,
+                                    user.empresa_id,
+                                    user.id,
+                                    "LOGIN_FALHA",
+                                    "Usuario",
+                                    user.id,
+                                    "Credencial inválida ou usuário inativo",
+                                )
+                                session.commit()
+                            else:
+                                # Pequeno atraso reduz a utilidade de enumeração/tentativas em massa.
+                                time.sleep(0.5)
+                            st.error("Credenciais inválidas ou acesso indisponível.")
+                except Exception:
+                    session.rollback()
+                    logger.exception("Falha inesperada na autenticação")
+                    st.error("Não foi possível concluir a autenticação. Tente novamente.", icon=None)
+                finally:
+                    session.close()
 
         st.markdown(
             """
@@ -4844,7 +4856,7 @@ else:
                     "em multa e juros de cobranças recebidas em atraso."
                 )
 
-            st.markdown("<div style='height:10px'></div>", unsafe_allow_html=True)
+            st.markdown("<div style='height:4px'></div>", unsafe_allow_html=True)
 
             m1, m2, m3, m4, m5 = st.columns(5)
             with m1:
@@ -4859,7 +4871,7 @@ else:
                 dashboard_mini_stat("Reservas em uso", reservas_em_uso)
 
             # ── Alertas executivos ────────────────────────────────────────────────
-            st.markdown("<div style='height:18px'></div>", unsafe_allow_html=True)
+            st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
             st.markdown(
                 """
                 <div class="kineo-section-heading">
@@ -4890,7 +4902,7 @@ else:
                 )
 
             # ── Visão analítica principal ─────────────────────────────────────────
-            st.markdown("<div style='height:18px'></div>", unsafe_allow_html=True)
+            st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
             col_fin, col_frota = st.columns([1.55, 1])
 
             with col_fin:
@@ -5052,7 +5064,7 @@ else:
                         st.info("Nenhum veículo cadastrado.", icon=None)
 
             # ── Contratos e saúde da frota ────────────────────────────────────────
-            st.markdown("<div style='height:18px'></div>", unsafe_allow_html=True)
+            st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
             col_contratos, col_saude = st.columns([1, 1])
 
             with col_contratos:
@@ -5104,7 +5116,7 @@ else:
                         st.success("Nenhum alerta crítico de manutenção.", icon=None)
 
             # ── Custos e atalhos ──────────────────────────────────────────────────
-            st.markdown("<div style='height:18px'></div>", unsafe_allow_html=True)
+            st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
             col_custos, col_acoes = st.columns([1.55, 1])
 
             with col_custos:
