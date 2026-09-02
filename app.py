@@ -2109,7 +2109,7 @@ def aplicar_css_dashboard_v11():
 [data-testid="stMain"] .block-container:has(.kineo-dashboard-v11),
 section.main .block-container:has(.kineo-dashboard-v11) {
     width: 100% !important;
-    max-width: 1600px !important;
+    max-width: none !important;
     margin-top: 0 !important;
     padding-top: .5rem !important;
     padding-bottom: 2rem !important;
