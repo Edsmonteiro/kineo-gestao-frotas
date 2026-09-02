@@ -652,7 +652,9 @@ for key, default in [
     ("autenticado", False),
     ("forcar_troca_senha", False),
     ("tela_config", False),
-    ("sidebar_pinned", False),
+    # O menu autenticado inicia fixo/expandido. O usuário ainda pode recolhê-lo
+    # pelo único botão de fixar/desafixar disponível na própria sidebar.
+    ("sidebar_pinned", True),
     ("privacidade_pendente", False),
     ("privacidade_dialog_suspenso", False),
     ("privacidade_rever", False),
@@ -2086,6 +2088,575 @@ def page_header(title: str, subtitle: str = ""):
 def fmt_brl(valor: float) -> str:
     return f"R$ {valor:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
 
+
+def aplicar_css_dashboard_v11():
+    """Aplica o tema executivo somente à tela do Painel Gerencial V11."""
+    st.markdown(
+        """
+<style>
+.block-container:has(.kineo-dashboard-v11) {
+    max-width: 1600px;
+    padding-top: 1.35rem;
+    padding-bottom: 2.5rem;
+}
+
+.kineo-dashboard-hero {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 28px;
+    margin-bottom: 24px;
+    padding: 28px 30px;
+    border: 1px solid #D8E6F7;
+    border-radius: 22px;
+    background:
+        radial-gradient(circle at 88% 14%, rgba(80, 155, 255, .20), transparent 29%),
+        linear-gradient(135deg, #F8FBFF 0%, #EEF5FF 62%, #E5F0FF 100%);
+    box-shadow: 0 15px 36px rgba(26, 73, 131, .08);
+}
+
+.kineo-dashboard-hero h1 {
+    margin: 5px 0 7px;
+    color: #0D2A56;
+    font-size: clamp(1.65rem, 2.35vw, 2.35rem);
+    line-height: 1.1;
+    letter-spacing: -.045em;
+}
+
+.kineo-dashboard-hero p {
+    max-width: 760px;
+    margin: 0;
+    color: #5F7290;
+    font-size: .94rem;
+    line-height: 1.55;
+}
+
+.kineo-dashboard-eyebrow {
+    color: #1768E5;
+    font-size: .72rem;
+    font-weight: 800;
+    letter-spacing: .14em;
+    text-transform: uppercase;
+}
+
+.kineo-dashboard-period {
+    min-width: 185px;
+    padding: 14px 17px;
+    border: 1px solid rgba(23, 104, 229, .15);
+    border-radius: 15px;
+    background: rgba(255, 255, 255, .72);
+    box-shadow: 0 10px 24px rgba(26, 73, 131, .07);
+}
+
+.kineo-dashboard-period span,
+.kineo-dashboard-period strong {
+    display: block;
+}
+
+.kineo-dashboard-period span {
+    margin-bottom: 4px;
+    color: #73839B;
+    font-size: .69rem;
+    font-weight: 700;
+    letter-spacing: .06em;
+    text-transform: uppercase;
+}
+
+.kineo-dashboard-period strong {
+    color: #153A66;
+    font-size: .96rem;
+}
+
+.kineo-section-heading {
+    display: flex;
+    align-items: end;
+    justify-content: space-between;
+    gap: 16px;
+    margin: 4px 0 12px;
+}
+
+.kineo-section-heading h2 {
+    margin: 0;
+    color: #17385F;
+    font-size: 1.04rem;
+    letter-spacing: -.015em;
+}
+
+.kineo-section-heading p {
+    margin: 4px 0 0;
+    color: #74849B;
+    font-size: .78rem;
+}
+
+.kineo-kpi-card {
+    min-height: 150px;
+    padding: 19px;
+    border: 1px solid #E0E9F4;
+    border-radius: 18px;
+    background: #FFFFFF;
+    box-shadow: 0 10px 28px rgba(31, 68, 112, .065);
+}
+
+.kineo-kpi-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+.kineo-kpi-label {
+    color: #65758D;
+    font-size: .76rem;
+    font-weight: 700;
+}
+
+.kineo-kpi-icon {
+    display: grid;
+    width: 35px;
+    height: 35px;
+    place-items: center;
+    border-radius: 11px;
+    font-size: .84rem;
+    font-weight: 850;
+}
+
+.kineo-kpi-icon.green { color: #087A58; background: #E4F7F0; }
+.kineo-kpi-icon.red { color: #C13B4D; background: #FDECEF; }
+.kineo-kpi-icon.blue { color: #1768E5; background: #EAF2FF; }
+.kineo-kpi-icon.indigo { color: #5A54C7; background: #EEEDFF; }
+.kineo-kpi-icon.amber { color: #A96505; background: #FFF3DB; }
+
+.kineo-kpi-value {
+    margin-top: 17px;
+    color: #102E55;
+    font-size: clamp(1.25rem, 1.75vw, 1.72rem);
+    font-weight: 820;
+    line-height: 1.1;
+    letter-spacing: -.035em;
+}
+
+.kineo-kpi-detail {
+    margin-top: 9px;
+    color: #7A899D;
+    font-size: .7rem;
+    line-height: 1.35;
+}
+
+.kineo-mini-stat {
+    min-height: 82px;
+    padding: 15px 16px;
+    border: 1px solid #E5ECF5;
+    border-radius: 15px;
+    background: #F9FBFE;
+}
+
+.kineo-mini-stat span,
+.kineo-mini-stat strong { display: block; }
+.kineo-mini-stat span { color: #738198; font-size: .7rem; font-weight: 650; }
+.kineo-mini-stat strong { margin-top: 5px; color: #17385F; font-size: 1.25rem; }
+
+.kineo-alert-card,
+.kineo-ok-card {
+    min-height: 125px;
+    padding: 17px;
+    border-radius: 16px;
+}
+
+.kineo-alert-card {
+    border: 1px solid #F3D8A6;
+    background: #FFF9ED;
+}
+
+.kineo-alert-card .tag {
+    display: inline-block;
+    margin-bottom: 10px;
+    padding: 3px 8px;
+    border-radius: 999px;
+    color: #985B06;
+    background: #FFEBC5;
+    font-size: .61rem;
+    font-weight: 800;
+    letter-spacing: .05em;
+    text-transform: uppercase;
+}
+
+.kineo-alert-card strong { display: block; color: #5E431D; font-size: .88rem; }
+.kineo-alert-card p { margin: 6px 0 0; color: #806A4A; font-size: .72rem; line-height: 1.45; }
+
+.kineo-ok-card {
+    min-height: auto;
+    border: 1px solid #CDEBDD;
+    color: #147253;
+    background: #F0FAF6;
+    font-size: .84rem;
+    font-weight: 650;
+}
+
+.kineo-contract-row,
+.kineo-health-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 18px;
+    padding: 12px 0;
+    border-bottom: 1px solid #EDF1F6;
+}
+
+.kineo-contract-row:last-child,
+.kineo-health-row:last-child { border-bottom: 0; }
+.kineo-contract-row span,
+.kineo-health-row span { color: #67768C; font-size: .78rem; }
+.kineo-contract-row strong,
+.kineo-health-row strong { color: #17385F; font-size: .82rem; text-align: right; }
+
+.block-container:has(.kineo-dashboard-v11) [data-testid="stVerticalBlockBorderWrapper"] {
+    border-color: #E1EAF4 !important;
+    border-radius: 18px !important;
+    background: #FFFFFF;
+    box-shadow: 0 10px 28px rgba(31, 68, 112, .055);
+}
+
+.block-container:has(.kineo-dashboard-v11) [data-testid="stButton"] button {
+    min-height: 42px;
+    border-radius: 11px;
+}
+
+@media (max-width: 900px) {
+    .kineo-dashboard-hero { align-items: flex-start; flex-direction: column; padding: 22px; }
+    .kineo-dashboard-period { min-width: 0; width: 100%; }
+}
+</style>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def dashboard_kpi_card(titulo, valor, detalhe, icone, tom="blue"):
+    """Renderiza um KPI executivo com valores escapados para HTML."""
+    tons_validos = {"green", "red", "blue", "indigo", "amber"}
+    tom_seguro = tom if tom in tons_validos else "blue"
+    st.markdown(
+        f"""
+        <div class="kineo-kpi-card">
+            <div class="kineo-kpi-top">
+                <span class="kineo-kpi-label">{html.escape(str(titulo))}</span>
+                <span class="kineo-kpi-icon {tom_seguro}">{html.escape(str(icone))}</span>
+            </div>
+            <div class="kineo-kpi-value">{html.escape(str(valor))}</div>
+            <div class="kineo-kpi-detail">{html.escape(str(detalhe))}</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def dashboard_mini_stat(titulo, valor):
+    """Renderiza um indicador operacional compacto."""
+    st.markdown(
+        f"""
+        <div class="kineo-mini-stat">
+            <span>{html.escape(str(titulo))}</span>
+            <strong>{html.escape(str(valor))}</strong>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def aplicar_css_gestao_frota_v11():
+    """Moderniza a Gestão de Frota sem interferir nas demais telas."""
+    st.markdown(
+        """
+<style>
+.block-container:has(.kineo-frota-v11) {
+    max-width: 1600px;
+    padding-top: 1.35rem;
+    padding-bottom: 2.5rem;
+}
+
+.kineo-frota-hero {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 24px;
+    margin-bottom: 20px;
+    padding: 25px 28px;
+    border: 1px solid #D8E6F7;
+    border-radius: 21px;
+    background:
+        radial-gradient(circle at 90% 15%, rgba(45, 134, 255, .18), transparent 27%),
+        linear-gradient(135deg, #F8FBFF 0%, #EEF5FF 64%, #E5F0FF 100%);
+    box-shadow: 0 14px 34px rgba(26, 73, 131, .075);
+}
+
+.kineo-frota-eyebrow {
+    color: #1768E5;
+    font-size: .7rem;
+    font-weight: 800;
+    letter-spacing: .14em;
+    text-transform: uppercase;
+}
+
+.kineo-frota-hero h1 {
+    margin: 5px 0 7px;
+    color: #0D2A56;
+    font-size: clamp(1.65rem, 2.25vw, 2.25rem);
+    line-height: 1.1;
+    letter-spacing: -.04em;
+}
+
+.kineo-frota-hero p {
+    max-width: 780px;
+    margin: 0;
+    color: #5F7290;
+    font-size: .9rem;
+    line-height: 1.5;
+}
+
+.kineo-frota-total {
+    min-width: 145px;
+    padding: 14px 17px;
+    border: 1px solid rgba(23, 104, 229, .15);
+    border-radius: 15px;
+    background: rgba(255, 255, 255, .78);
+    text-align: right;
+}
+
+.kineo-frota-total span,
+.kineo-frota-total strong { display: block; }
+.kineo-frota-total span { color: #718199; font-size: .68rem; font-weight: 700; text-transform: uppercase; }
+.kineo-frota-total strong { margin-top: 2px; color: #153A66; font-size: 1.55rem; }
+
+.kineo-frota-stat {
+    min-height: 106px;
+    padding: 17px 18px;
+    border: 1px solid #E1EAF4;
+    border-radius: 17px;
+    background: #FFFFFF;
+    box-shadow: 0 9px 25px rgba(31, 68, 112, .055);
+}
+
+.kineo-frota-stat-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+}
+
+.kineo-frota-stat span { color: #68788F; font-size: .73rem; font-weight: 700; }
+.kineo-frota-stat strong { display: block; margin-top: 10px; color: #17385F; font-size: 1.42rem; line-height: 1; }
+.kineo-frota-stat small { display: block; margin-top: 7px; color: #8794A7; font-size: .65rem; }
+.kineo-frota-dot { width: 9px; height: 9px; border-radius: 50%; }
+.kineo-frota-dot.blue { background: #1768E5; box-shadow: 0 0 0 5px #EAF2FF; }
+.kineo-frota-dot.green { background: #17A673; box-shadow: 0 0 0 5px #E7F7F1; }
+.kineo-frota-dot.indigo { background: #6765D8; box-shadow: 0 0 0 5px #EFEEFF; }
+.kineo-frota-dot.amber { background: #E59A23; box-shadow: 0 0 0 5px #FFF3DF; }
+
+.block-container:has(.kineo-frota-v11) [data-testid="stTabs"] {
+    margin-top: 18px;
+}
+
+.block-container:has(.kineo-frota-v11) [data-baseweb="tab-list"] {
+    gap: 7px;
+    padding: 6px;
+    border: 1px solid #E0E8F2;
+    border-radius: 14px;
+    background: #F5F8FC;
+}
+
+.block-container:has(.kineo-frota-v11) [data-baseweb="tab"] {
+    min-height: 40px;
+    padding: 8px 14px;
+    border-radius: 10px;
+    color: #607189;
+    font-size: .76rem;
+    font-weight: 650;
+}
+
+.block-container:has(.kineo-frota-v11) [data-baseweb="tab"][aria-selected="true"] {
+    color: #145FCF;
+    background: #FFFFFF;
+    box-shadow: 0 4px 13px rgba(28, 72, 124, .09);
+}
+
+.block-container:has(.kineo-frota-v11) [data-baseweb="tab-highlight"] { display: none; }
+
+.block-container:has(.kineo-frota-v11) [data-testid="stVerticalBlockBorderWrapper"] {
+    border-color: #E1EAF4 !important;
+    border-radius: 18px !important;
+    background: #FFFFFF;
+    box-shadow: 0 9px 26px rgba(31, 68, 112, .05);
+}
+
+.block-container:has(.kineo-frota-v11) [data-testid="stForm"],
+.block-container:has(.kineo-frota-v11) [data-testid="stExpander"] {
+    border-color: #E1EAF4 !important;
+    border-radius: 15px !important;
+}
+
+.block-container:has(.kineo-frota-v11) [data-testid="stButton"] button,
+.block-container:has(.kineo-frota-v11) [data-testid="stDownloadButton"] button {
+    min-height: 41px;
+    border-radius: 10px;
+}
+
+.block-container:has(.kineo-frota-v11) [data-testid="stDataFrame"] {
+    overflow: hidden;
+    border: 1px solid #E3EAF3;
+    border-radius: 13px;
+}
+
+.kineo-frota-overview-head {
+    display: flex;
+    align-items: end;
+    justify-content: space-between;
+    gap: 18px;
+    margin: 8px 0 16px;
+}
+
+.kineo-frota-overview-head h2 {
+    margin: 0;
+    color: #17385F;
+    font-size: 1.08rem;
+}
+
+.kineo-frota-overview-head p {
+    margin: 4px 0 0;
+    color: #77869B;
+    font-size: .77rem;
+}
+
+.kineo-frota-insight {
+    min-height: 105px;
+    padding: 16px;
+    border: 1px solid #E2EAF4;
+    border-radius: 15px;
+    background: #F9FBFE;
+}
+
+.kineo-frota-insight span,
+.kineo-frota-insight strong,
+.kineo-frota-insight small { display: block; }
+.kineo-frota-insight span { color: #738198; font-size: .67rem; font-weight: 750; text-transform: uppercase; }
+.kineo-frota-insight strong { margin-top: 8px; color: #17385F; font-size: 1.18rem; }
+.kineo-frota-insight small { margin-top: 6px; color: #8290A3; font-size: .68rem; line-height: 1.4; }
+
+@media (max-width: 900px) {
+    .kineo-frota-hero { align-items: flex-start; flex-direction: column; padding: 21px; }
+    .kineo-frota-total { min-width: 0; width: 100%; text-align: left; }
+    .block-container:has(.kineo-frota-v11) [data-baseweb="tab-list"] { overflow-x: auto; }
+}
+</style>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def frota_stat_card(titulo, valor, detalhe, tom="blue"):
+    tons_validos = {"blue", "green", "indigo", "amber"}
+    tom_seguro = tom if tom in tons_validos else "blue"
+    st.markdown(
+        f"""
+        <div class="kineo-frota-stat">
+            <div class="kineo-frota-stat-top">
+                <span>{html.escape(str(titulo))}</span>
+                <i class="kineo-frota-dot {tom_seguro}"></i>
+            </div>
+            <strong>{html.escape(str(valor))}</strong>
+            <small>{html.escape(str(detalhe))}</small>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def aplicar_css_modulos_v11():
+    """Linguagem visual compartilhada pelos módulos operacionais internos."""
+    st.markdown(
+        """
+<style>
+.block-container:has(.kineo-module-v11) {
+    max-width: 1600px;
+    padding-top: 1.35rem;
+    padding-bottom: 2.5rem;
+}
+.kineo-module-hero {
+    display:flex; align-items:center; justify-content:space-between; gap:24px;
+    margin-bottom:20px; padding:25px 28px; border:1px solid #D8E6F7;
+    border-radius:21px;
+    background:radial-gradient(circle at 90% 15%,rgba(45,134,255,.17),transparent 27%),linear-gradient(135deg,#F8FBFF 0%,#EEF5FF 64%,#E5F0FF 100%);
+    box-shadow:0 14px 34px rgba(26,73,131,.075);
+}
+.kineo-module-eyebrow { color:#1768E5; font-size:.7rem; font-weight:800; letter-spacing:.14em; text-transform:uppercase; }
+.kineo-module-hero h1 { margin:5px 0 7px; color:#0D2A56; font-size:clamp(1.65rem,2.25vw,2.25rem); line-height:1.1; letter-spacing:-.04em; }
+.kineo-module-hero p { max-width:790px; margin:0; color:#5F7290; font-size:.9rem; line-height:1.5; }
+.kineo-module-badge { min-width:150px; padding:14px 17px; border:1px solid rgba(23,104,229,.15); border-radius:15px; background:rgba(255,255,255,.78); text-align:right; }
+.kineo-module-badge span,.kineo-module-badge strong { display:block; }
+.kineo-module-badge span { color:#718199; font-size:.66rem; font-weight:700; text-transform:uppercase; }
+.kineo-module-badge strong { margin-top:3px; color:#153A66; font-size:1.38rem; }
+.kineo-module-stat { min-height:105px; padding:17px 18px; border:1px solid #E1EAF4; border-radius:17px; background:#FFF; box-shadow:0 9px 25px rgba(31,68,112,.055); }
+.kineo-module-stat span,.kineo-module-stat strong,.kineo-module-stat small { display:block; }
+.kineo-module-stat span { color:#68788F; font-size:.71rem; font-weight:700; }
+.kineo-module-stat strong { margin-top:10px; color:#17385F; font-size:1.32rem; line-height:1; }
+.kineo-module-stat small { margin-top:7px; color:#8794A7; font-size:.65rem; line-height:1.35; }
+.kineo-account-card { display:flex; align-items:center; gap:20px; padding:22px; border:1px solid #E1EAF4; border-radius:18px; background:#FFF; box-shadow:0 9px 26px rgba(31,68,112,.05); }
+.kineo-account-avatar { display:grid; width:78px; height:78px; flex:0 0 78px; place-items:center; overflow:hidden; border-radius:22px; color:#FFF; background:linear-gradient(145deg,#1768E5,#5BA4FF); font-size:1.55rem; font-weight:850; box-shadow:0 12px 25px rgba(23,104,229,.2); }
+.kineo-account-avatar img { width:100%; height:100%; object-fit:cover; }
+.kineo-account-card h2 { margin:0; color:#17385F; font-size:1.2rem; }
+.kineo-account-card p { margin:5px 0 0; color:#708097; font-size:.78rem; }
+.kineo-account-role { display:inline-block; margin-top:9px; padding:4px 9px; border-radius:999px; color:#1768E5; background:#EAF2FF; font-size:.63rem; font-weight:750; text-transform:uppercase; }
+.kineo-info-row { display:flex; align-items:center; justify-content:space-between; gap:18px; padding:13px 0; border-bottom:1px solid #EDF1F6; }
+.kineo-info-row:last-child { border-bottom:0; }
+.kineo-info-row span { color:#708097; font-size:.75rem; }
+.kineo-info-row strong { color:#17385F; font-size:.78rem; text-align:right; }
+.block-container:has(.kineo-module-v11) [data-testid="stTabs"] { margin-top:18px; }
+.block-container:has(.kineo-module-v11) [data-baseweb="tab-list"] { gap:7px; padding:6px; border:1px solid #E0E8F2; border-radius:14px; background:#F5F8FC; }
+.block-container:has(.kineo-module-v11) [data-baseweb="tab"] { min-height:40px; padding:8px 14px; border-radius:10px; color:#607189; font-size:.76rem; font-weight:650; }
+.block-container:has(.kineo-module-v11) [data-baseweb="tab"][aria-selected="true"] { color:#145FCF; background:#FFF; box-shadow:0 4px 13px rgba(28,72,124,.09); }
+.block-container:has(.kineo-module-v11) [data-baseweb="tab-highlight"] { display:none; }
+.block-container:has(.kineo-module-v11) [data-testid="stVerticalBlockBorderWrapper"] { border-color:#E1EAF4 !important; border-radius:18px !important; background:#FFF; box-shadow:0 9px 26px rgba(31,68,112,.05); }
+.block-container:has(.kineo-module-v11) [data-testid="stForm"],.block-container:has(.kineo-module-v11) [data-testid="stExpander"] { border-color:#E1EAF4 !important; border-radius:15px !important; }
+.block-container:has(.kineo-module-v11) [data-testid="stButton"] button,.block-container:has(.kineo-module-v11) [data-testid="stDownloadButton"] button { min-height:41px; border-radius:10px; }
+.block-container:has(.kineo-module-v11) [data-testid="stDataFrame"] { overflow:hidden; border:1px solid #E3EAF3; border-radius:13px; }
+@media(max-width:900px){.kineo-module-hero{align-items:flex-start;flex-direction:column;padding:21px}.kineo-module-badge{min-width:0;width:100%;text-align:left}.block-container:has(.kineo-module-v11) [data-baseweb="tab-list"]{overflow-x:auto}}
+</style>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def module_hero(eyebrow, titulo, subtitulo, badge_label, badge_value):
+    st.markdown(
+        f"""
+        <div class="kineo-module-v11"></div>
+        <div class="kineo-module-hero">
+            <div>
+                <div class="kineo-module-eyebrow">{html.escape(str(eyebrow))}</div>
+                <h1>{html.escape(str(titulo))}</h1>
+                <p>{html.escape(str(subtitulo))}</p>
+            </div>
+            <div class="kineo-module-badge">
+                <span>{html.escape(str(badge_label))}</span>
+                <strong>{html.escape(str(badge_value))}</strong>
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def module_stat_card(titulo, valor, detalhe):
+    st.markdown(
+        f"""
+        <div class="kineo-module-stat">
+            <span>{html.escape(str(titulo))}</span>
+            <strong>{html.escape(str(valor))}</strong>
+            <small>{html.escape(str(detalhe))}</small>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
 def _texto_planilha(valor):
     if valor is None or (isinstance(valor, float) and pd.isna(valor)):
         return ""
@@ -2661,7 +3232,7 @@ def render_gestao_motoristas(emp_id):
             for _, row in df_users_motorista.iterrows():
                 opcoes_usuario[f"{row['nome']} ({row['login']})"] = int(row["id"])
 
-    tab_novo, tab_gestao = st.tabs(["Novo Motorista", "Gestão de Motoristas"])
+    tab_gestao, tab_novo = st.tabs(["Visão geral", "Adicionar motorista"])
 
     with tab_novo:
         with st.form("form_novo_motorista", clear_on_submit=True):
@@ -3030,9 +3601,9 @@ def render_gestao_usuarios(emp_id):
     else:
         st.info("Nenhum usuário cadastrado.", icon=None)
 
-    sub1, sub2, sub3, sub4 = st.tabs([
-        "Nova Credencial",
-        "Gestão de Credencial",
+    sub2, sub1, sub3, sub4 = st.tabs([
+        "Gestão de acessos",
+        "Nova credencial",
         "Redefinir Acesso",
         "Excluir Usuário",
     ])
@@ -3899,10 +4470,8 @@ else:
         # PAINEL GERENCIAL
         # ══════════════════════════════════════════════════════════════════════════
         if tela_ativa == "Painel Gerencial":
-            page_header(
-                "Painel Gerencial",
-                "Visão executiva da operação, contratos e desempenho financeiro."
-            )
+            aplicar_css_dashboard_v11()
+            st.markdown('<div class="kineo-dashboard-v11"></div>', unsafe_allow_html=True)
 
             hoje = hoje_local()
             mes_atual_str = hoje.strftime("%m/%Y")
@@ -3910,21 +4479,21 @@ else:
             mes_anterior_str = (primeiro_dia_mes - timedelta(days=1)).strftime("%m/%Y")
             limite_30_dias = hoje + timedelta(days=30)
 
-            # ── Consultas principais ──────────────────────────────────────────────
-            df_status = carregar_dados_tabela(f"""
+            # ── Consultas principais (regras existentes preservadas) ──────────────
+            df_status = carregar_dados_tabela("""
                 SELECT status, COUNT(id) AS qtd
                 FROM veiculos
                 WHERE empresa_id = :empresa_id AND COALESCE(ativo, 1)=1
                 GROUP BY status
             """, emp_id)
 
-            df_veiculos_dash = carregar_dados_tabela(f"""
+            df_veiculos_dash = carregar_dados_tabela("""
                 SELECT id, placa, modelo, km_atual, status
                 FROM veiculos
                 WHERE empresa_id = :empresa_id AND COALESCE(ativo, 1)=1
             """, emp_id)
 
-            df_custos = carregar_dados_tabela(f"""
+            df_custos = carregar_dados_tabela("""
                 SELECT c.id, c.veiculo_id, c.data_custo, c.categoria, c.valor_total,
                        v.placa, v.modelo
                 FROM custos c
@@ -3932,14 +4501,16 @@ else:
                 WHERE c.empresa_id = :empresa_id
             """, emp_id)
 
-            df_cobrancas = carregar_dados_tabela(f"""
+            df_cobrancas = carregar_dados_tabela("""
                 SELECT mes_ano, valor_previsto, status, vencimento,
-                       data_recebimento, multa, juros, valor_principal_liquidado, multa_aplicada, juros_aplicados, dias_atraso_liquidacao, valor_liquidado, liquidacao_congelada, liquidado_em
+                       data_recebimento, multa, juros, valor_principal_liquidado,
+                       multa_aplicada, juros_aplicados, dias_atraso_liquidacao,
+                       valor_liquidado, liquidacao_congelada, liquidado_em
                 FROM cobrancas_mensais
                 WHERE empresa_id = :empresa_id
             """, emp_id)
 
-            df_contratos_dash = carregar_dados_tabela(f"""
+            df_contratos_dash = carregar_dados_tabela("""
                 SELECT c.id, c.veiculo_id, c.cliente, c.data_inicio, c.data_fim,
                        c.ativo, c.tipo_valor, c.valor_mensal, v.placa, v.modelo
                 FROM contratos c
@@ -3948,7 +4519,7 @@ else:
             """, emp_id)
 
             try:
-                df_substituicoes_dash = carregar_dados_tabela(f"""
+                df_substituicoes_dash = carregar_dados_tabela("""
                     SELECT s.id, s.contrato_id, s.veiculo_principal_id,
                            s.veiculo_substituto_id, s.data_inicio, s.data_fim, s.ativo,
                            vp.placa AS placa_principal,
@@ -3967,7 +4538,9 @@ else:
             if not df_custos.empty:
                 df_custos["data_custo"] = pd.to_datetime(df_custos["data_custo"], errors="coerce")
                 df_custos["mes_ano"] = df_custos["data_custo"].dt.strftime("%m/%Y")
-                df_custos["valor_total"] = pd.to_numeric(df_custos["valor_total"], errors="coerce").fillna(0.0)
+                df_custos["valor_total"] = pd.to_numeric(
+                    df_custos["valor_total"], errors="coerce"
+                ).fillna(0.0)
 
             if not df_cobrancas.empty:
                 df_cobrancas["valor_previsto"] = pd.to_numeric(
@@ -3979,10 +4552,6 @@ else:
                 df_cobrancas["status"] = (
                     df_cobrancas["status"].fillna("").apply(normalizar_status_cobranca)
                 )
-
-                # O Painel Gerencial precisa refletir o valor financeiro efetivo da cobrança.
-                # Enquanto estiver aberta, usa o valor previsto. Depois de recebida, usa o valor
-                # atualizado até a data do recebimento (principal + multa + juros).
                 df_cobrancas["_encargos"] = df_cobrancas.apply(
                     encargos_cobranca_exibicao, axis=1
                 )
@@ -4006,9 +4575,15 @@ else:
                 )
 
             if not df_contratos_dash.empty:
-                df_contratos_dash["data_inicio"] = pd.to_datetime(df_contratos_dash["data_inicio"], errors="coerce")
-                df_contratos_dash["data_fim"] = pd.to_datetime(df_contratos_dash["data_fim"], errors="coerce")
-                df_contratos_dash["valor_mensal"] = pd.to_numeric(df_contratos_dash["valor_mensal"], errors="coerce").fillna(0.0)
+                df_contratos_dash["data_inicio"] = pd.to_datetime(
+                    df_contratos_dash["data_inicio"], errors="coerce"
+                )
+                df_contratos_dash["data_fim"] = pd.to_datetime(
+                    df_contratos_dash["data_fim"], errors="coerce"
+                )
+                df_contratos_dash["valor_mensal"] = pd.to_numeric(
+                    df_contratos_dash["valor_mensal"], errors="coerce"
+                ).fillna(0.0)
 
             def qtd_status(nome):
                 if df_status.empty:
@@ -4020,7 +4595,7 @@ else:
                 atual = float(atual or 0)
                 anterior = float(anterior or 0)
                 if anterior == 0:
-                    return None if atual == 0 else "Novo no mês"
+                    return "Sem histórico anterior" if atual == 0 else "Novo no mês"
                 return f"{((atual-anterior)/abs(anterior))*100:+.1f}% vs mês anterior"
 
             # ── Indicadores operacionais ──────────────────────────────────────────
@@ -4035,7 +4610,9 @@ else:
             receita_contratada = 0.0
 
             if not df_contratos_dash.empty:
-                contratos_ativos_df = df_contratos_dash[df_contratos_dash["ativo"] == 1].copy()
+                contratos_ativos_df = df_contratos_dash[
+                    df_contratos_dash["ativo"] == 1
+                ].copy()
                 contratos_ativos = len(contratos_ativos_df)
                 if not contratos_ativos_df.empty:
                     contratos_vencendo_30 = len(contratos_ativos_df[
@@ -4047,14 +4624,20 @@ else:
                         contratos_ativos_df["tipo_valor"] == "Fixo", "valor_mensal"
                     ].sum()
 
-            reservas_em_uso = len(df_substituicoes_dash) if not df_substituicoes_dash.empty else 0
+            reservas_em_uso = (
+                len(df_substituicoes_dash) if not df_substituicoes_dash.empty else 0
+            )
 
             # ── Indicadores financeiros ───────────────────────────────────────────
             custos_mes_atual = 0.0
             custos_mes_anterior = 0.0
             if not df_custos.empty:
-                custos_mes_atual = df_custos.loc[df_custos["mes_ano"] == mes_atual_str, "valor_total"].sum()
-                custos_mes_anterior = df_custos.loc[df_custos["mes_ano"] == mes_anterior_str, "valor_total"].sum()
+                custos_mes_atual = df_custos.loc[
+                    df_custos["mes_ano"] == mes_atual_str, "valor_total"
+                ].sum()
+                custos_mes_anterior = df_custos.loc[
+                    df_custos["mes_ano"] == mes_anterior_str, "valor_total"
+                ].sum()
 
             faturamento_mes_atual = 0.0
             faturamento_mes_anterior = 0.0
@@ -4083,45 +4666,40 @@ else:
 
             saldo_mes = faturamento_mes_atual - custos_mes_atual
 
-            # ── KPIs principais ───────────────────────────────────────────────────
-            c1, c2, c3, c4, c5 = st.columns(5)
-            c1.metric("Frota Total", veiculos_totais, delta=f"{veiculos_disponiveis} disponíveis")
-            c2.metric("Taxa de Ocupação", f"{taxa_ocupacao:.1f}%", delta=f"{veiculos_alugados} alugados")
-            c3.metric("Faturamento (Mês)", fmt_brl(faturamento_mes_atual), delta=variacao_mes(faturamento_mes_atual, faturamento_mes_anterior))
-            c4.metric("Despesas (Mês)", fmt_brl(custos_mes_atual), delta=variacao_mes(custos_mes_atual, custos_mes_anterior), delta_color="inverse")
-            c5.metric(
-                "Saldo Líquido",
-                fmt_brl(saldo_mes),
-                delta=f"{inadimplencia_qtd} atraso(s)",
-                delta_color="inverse" if inadimplencia_qtd > 0 else "off"
-            )
-
-            if encargos_recebidos_mes > 0:
-                st.caption(
-                    f"Faturamento do mês inclui {fmt_brl(encargos_recebidos_mes)} em multa e juros "
-                    "de cobranças recebidas em atraso. Cobranças ainda abertas permanecem pelo valor previsto."
-                )
-
-            st.markdown("<br>", unsafe_allow_html=True)
-
             # ── Alertas e manutenção preventiva ───────────────────────────────────
             alertas = []
             if contratos_vencendo_30:
-                alertas.append(("Contratos próximos do vencimento", f"{contratos_vencendo_30} contrato(s) vencem nos próximos 30 dias."))
+                alertas.append((
+                    "Contratos próximos do vencimento",
+                    f"{contratos_vencendo_30} contrato(s) vencem nos próximos 30 dias."
+                ))
             if veiculos_manutencao:
-                alertas.append(("Veículos em manutenção", f"{veiculos_manutencao} veículo(s) estão indisponíveis para operação."))
+                alertas.append((
+                    "Veículos em manutenção",
+                    f"{veiculos_manutencao} veículo(s) estão indisponíveis para operação."
+                ))
             if reservas_em_uso:
-                alertas.append(("Reservas em operação", f"{reservas_em_uso} veículo(s) reserva atendem contratos temporariamente."))
+                alertas.append((
+                    "Reservas em operação",
+                    f"{reservas_em_uso} veículo(s) reserva atendem contratos temporariamente."
+                ))
             if inadimplencia_qtd:
-                alertas.append(("Cobranças vencidas", f"{inadimplencia_qtd} cobrança(s) estão pendentes e vencidas."))
+                alertas.append((
+                    "Cobranças vencidas",
+                    f"{inadimplencia_qtd} cobrança(s) estão pendentes e vencidas."
+                ))
 
             diag_dashboard = diagnostico_manutencao(emp_id)
             revisoes_proximas = []
             if not diag_dashboard.empty:
-                diag_alerta = diag_dashboard[diag_dashboard["Status"].isin(["VENCIDO", "PRÓXIMO", "ATENÇÃO"])].copy()
+                diag_alerta = diag_dashboard[
+                    diag_dashboard["Status"].isin(["VENCIDO", "PRÓXIMO", "ATENÇÃO"])
+                ].copy()
                 prioridade_dash = {"VENCIDO": 0, "PRÓXIMO": 1, "ATENÇÃO": 2}
                 diag_alerta["_ordem"] = diag_alerta["Status"].map(prioridade_dash)
-                diag_alerta = diag_alerta.sort_values(["_ordem", "Faltam KM", "Faltam Dias"], na_position="last")
+                diag_alerta = diag_alerta.sort_values(
+                    ["_ordem", "Faltam KM", "Faltam Dias"], na_position="last"
+                )
                 for _, manut in diag_alerta.iterrows():
                     if pd.notna(manut["Faltam KM"]):
                         detalhe = f"{int(manut['Faltam KM']):,} km".replace(",", ".")
@@ -4136,29 +4714,37 @@ else:
                         "detalhe": detalhe,
                     })
             else:
-                # Compatibilidade temporária: veículos ainda sem plano continuam usando o alerta genérico legado.
-                df_v_km = carregar_dados_tabela(f"""
+                df_v_km = carregar_dados_tabela("""
                     SELECT id, placa, km_atual
                     FROM veiculos
-                    WHERE empresa_id = :empresa_id AND COALESCE(ativo, 1)=1 AND km_atual>0
+                    WHERE empresa_id = :empresa_id
+                      AND COALESCE(ativo, 1)=1
+                      AND km_atual>0
                 """, emp_id)
-                df_manu = carregar_dados_tabela(f"""
+                df_manu = carregar_dados_tabela("""
                     SELECT veiculo_id, MAX(km_momento) AS ultimo_km
                     FROM custos
-                    WHERE empresa_id = :empresa_id AND categoria='Manutenção Preventiva'
+                    WHERE empresa_id = :empresa_id
+                      AND categoria='Manutenção Preventiva'
                     GROUP BY veiculo_id
                 """, emp_id)
                 for _, v in df_v_km.iterrows():
                     ultimo_km = 0.0
                     if not df_manu.empty and v["id"] in df_manu["veiculo_id"].values:
-                        serie = df_manu.loc[df_manu["veiculo_id"] == v["id"], "ultimo_km"]
+                        serie = df_manu.loc[
+                            df_manu["veiculo_id"] == v["id"], "ultimo_km"
+                        ]
                         if not serie.empty and pd.notna(serie.iloc[0]):
                             ultimo_km = float(serie.iloc[0])
                     km_rodado = float(v["km_atual"] or 0) - ultimo_km
                     if km_rodado >= 9500:
                         revisoes_proximas.append({
-                            "placa": v["placa"], "servico": "Revisão preventiva",
-                            "status": "PRÓXIMO", "detalhe": f"{km_rodado:,.0f} km desde a última preventiva"
+                            "placa": v["placa"],
+                            "servico": "Revisão preventiva",
+                            "status": "PRÓXIMO",
+                            "detalhe": (
+                                f"{km_rodado:,.0f} km desde a última preventiva"
+                            ),
                         })
 
             if revisoes_proximas:
@@ -4166,102 +4752,161 @@ else:
                 primeiro = revisoes_proximas[0]
                 alertas.append((
                     "Manutenção preventiva",
-                    f"{veiculos_alerta} veículo(s) exigem atenção. {primeiro['placa']} · {primeiro['servico']} ({primeiro['status']})."
+                    (
+                        f"{veiculos_alerta} veículo(s) exigem atenção. "
+                        f"{primeiro['placa']} · {primeiro['servico']} "
+                        f"({primeiro['status']})."
+                    ),
                 ))
 
+            qtd_revisao = len({r["placa"] for r in revisoes_proximas})
+            veiculos_saudaveis = max(
+                veiculos_totais - veiculos_manutencao - qtd_revisao, 0
+            )
+
+            # ── Cabeçalho executivo ────────────────────────────────────────────────
+            nome_usuario = str(st.session_state.get("nome") or "Gestor").strip()
+            primeiro_nome = html.escape(nome_usuario.split()[0] if nome_usuario else "Gestor")
+            meses_pt = [
+                "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
+                "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"
+            ]
+            periodo_label = f"{meses_pt[hoje.month - 1]} de {hoje.year}"
+
+            st.markdown(
+                f"""
+                <div class="kineo-dashboard-hero">
+                    <div>
+                        <div class="kineo-dashboard-eyebrow">Visão executiva</div>
+                        <h1>Olá, {primeiro_nome}. Veja sua operação hoje.</h1>
+                        <p>Frota, contratos e financeiro reunidos em uma visão objetiva para apoiar decisões rápidas.</p>
+                    </div>
+                    <div class="kineo-dashboard-period">
+                        <span>Competência atual</span>
+                        <strong>{html.escape(periodo_label)}</strong>
+                    </div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+
+            # ── KPIs executivos ───────────────────────────────────────────────────
+            st.markdown(
+                """
+                <div class="kineo-section-heading">
+                    <div><h2>Indicadores principais</h2><p>Resumo financeiro e operacional da competência atual.</p></div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+
+            k1, k2, k3, k4 = st.columns(4)
+            with k1:
+                dashboard_kpi_card(
+                    "Faturamento",
+                    fmt_brl(faturamento_mes_atual),
+                    variacao_mes(faturamento_mes_atual, faturamento_mes_anterior),
+                    "R$",
+                    "green",
+                )
+            with k2:
+                dashboard_kpi_card(
+                    "Despesas",
+                    fmt_brl(custos_mes_atual),
+                    variacao_mes(custos_mes_atual, custos_mes_anterior),
+                    "↘",
+                    "red",
+                )
+            with k3:
+                dashboard_kpi_card(
+                    "Saldo líquido",
+                    fmt_brl(saldo_mes),
+                    (
+                        f"{inadimplencia_qtd} cobrança(s) vencida(s)"
+                        if inadimplencia_qtd
+                        else "Sem cobranças vencidas"
+                    ),
+                    "↗" if saldo_mes >= 0 else "−",
+                    "blue" if saldo_mes >= 0 else "red",
+                )
+            with k4:
+                dashboard_kpi_card(
+                    "Taxa de ocupação",
+                    f"{taxa_ocupacao:.1f}%",
+                    f"{veiculos_alugados} alugado(s) de {veiculos_totais} veículo(s)",
+                    "%",
+                    "indigo",
+                )
+
+            if encargos_recebidos_mes > 0:
+                st.caption(
+                    f"O faturamento do mês inclui {fmt_brl(encargos_recebidos_mes)} "
+                    "em multa e juros de cobranças recebidas em atraso."
+                )
+
+            st.markdown("<div style='height:10px'></div>", unsafe_allow_html=True)
+
+            m1, m2, m3, m4, m5 = st.columns(5)
+            with m1:
+                dashboard_mini_stat("Frota total", veiculos_totais)
+            with m2:
+                dashboard_mini_stat("Disponíveis", veiculos_disponiveis)
+            with m3:
+                dashboard_mini_stat("Contratos ativos", contratos_ativos)
+            with m4:
+                dashboard_mini_stat("Vencendo em 30 dias", contratos_vencendo_30)
+            with m5:
+                dashboard_mini_stat("Reservas em uso", reservas_em_uso)
+
+            # ── Alertas executivos ────────────────────────────────────────────────
+            st.markdown("<div style='height:18px'></div>", unsafe_allow_html=True)
+            st.markdown(
+                """
+                <div class="kineo-section-heading">
+                    <div><h2>Atenção operacional</h2><p>Pontos que merecem acompanhamento antes de virarem impacto.</p></div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+
             if alertas:
-                with st.container(border=True):
-                    st.markdown("### Atenção Operacional")
-                    st.caption("Itens que merecem acompanhamento da gestão.")
-                    cols_alerta = st.columns(min(len(alertas), 4))
-                    for idx, (titulo, descricao) in enumerate(alertas[:4]):
-                        with cols_alerta[idx]:
-                            st.markdown(f"""
-                            <div style="min-height:96px;padding:14px;border:1px solid #E5E7EB;border-radius:10px;background:#F8FAFC;">
-                                <div style="font-size:11px;color:#64748B;text-transform:uppercase;font-weight:600;margin-bottom:6px;">{titulo}</div>
-                                <div style="font-size:13px;font-weight:600;color:#111827;line-height:1.35;">{descricao}</div>
+                cols_alerta = st.columns(min(len(alertas), 4))
+                for idx, (titulo, descricao) in enumerate(alertas[:4]):
+                    with cols_alerta[idx]:
+                        st.markdown(
+                            f"""
+                            <div class="kineo-alert-card">
+                                <span class="tag">Acompanhar</span>
+                                <strong>{html.escape(str(titulo))}</strong>
+                                <p>{html.escape(str(descricao))}</p>
                             </div>
-                            """, unsafe_allow_html=True)
-
-                st.markdown("<br>", unsafe_allow_html=True)
-
-            # ── Linha principal: frota + contratos ─────────────────────────────────
-            col_frota, col_contratos = st.columns([1.15, 1])
-
-            with col_frota:
-                with st.container(border=True):
-                    st.markdown("### Disponibilidade da Frota")
-                    st.caption("Distribuição atual dos veículos por status.")
-
-                    if veiculos_totais > 0:
-                        df_pizza = pd.DataFrame({
-                            "Status": ["Disponível", "Alugado", "Manutenção"],
-                            "Quantidade": [veiculos_disponiveis, veiculos_alugados, veiculos_manutencao]
-                        })
-                        df_pizza = df_pizza[df_pizza["Quantidade"] > 0]
-
-                        fig_frota = px.pie(
-                            df_pizza,
-                            names="Status",
-                            values="Quantidade",
-                            hole=0.68,
-                            color="Status",
-                            color_discrete_map={
-                                "Disponível": PALETTE["green"],
-                                "Alugado": PALETTE["indigo"],
-                                "Manutenção": PALETTE["amber"]
-                            }
+                            """,
+                            unsafe_allow_html=True,
                         )
-                        fig_frota.update_traces(textposition="outside", textinfo="label+value")
-                        fig_frota.add_annotation(
-                            text=f"<b>{veiculos_totais}</b><br>veículos",
-                            x=0.5, y=0.5, showarrow=False, font=dict(size=18)
-                        )
-                        fig_frota.update_layout(**PLOTLY_LAYOUT, height=255, showlegend=False)
-                        st.plotly_chart(fig_frota, use_container_width=True, config={"displayModeBar": False})
+            else:
+                st.markdown(
+                    '<div class="kineo-ok-card">✓ Nenhum alerta operacional relevante neste momento.</div>',
+                    unsafe_allow_html=True,
+                )
 
-                        f1, f2, f3 = st.columns(3)
-                        f1.metric("Disponíveis", veiculos_disponiveis)
-                        f2.metric("Alugados", veiculos_alugados)
-                        f3.metric("Manutenção", veiculos_manutencao)
-                    else:
-                        st.info("Nenhum veículo cadastrado.", icon=None)
-
-            with col_contratos:
-                with st.container(border=True):
-                    st.markdown("### Carteira de Contratos")
-                    st.caption("Resumo comercial dos contratos vigentes.")
-                    st.metric("Receita Mensal Contratada", fmt_brl(receita_contratada))
-
-                    ct1, ct2 = st.columns(2)
-                    ct1.metric("Contratos Ativos", contratos_ativos)
-                    ct2.metric("Vencendo em 30 dias", contratos_vencendo_30)
-
-                    ct3, ct4 = st.columns(2)
-                    ct3.metric("Reservas em Uso", reservas_em_uso)
-                    ct4.metric("Frota em Manutenção", veiculos_manutencao)
-
-                    if reservas_em_uso > 0:
-                        st.markdown("---")
-                        st.markdown("**Substituições temporárias em andamento**")
-                        for _, r in df_substituicoes_dash.head(4).iterrows():
-                            st.caption(f"{r['cliente']} · {r['placa_principal']} → {r['placa_substituto']}")
-
-            st.markdown("<br>", unsafe_allow_html=True)
-
-            # ── Linha adaptativa: financeiro + saúde da frota ──────────────────────
-            col_fin, col_saude = st.columns([1.35, 1])
+            # ── Visão analítica principal ─────────────────────────────────────────
+            st.markdown("<div style='height:18px'></div>", unsafe_allow_html=True)
+            col_fin, col_frota = st.columns([1.55, 1])
 
             with col_fin:
                 with st.container(border=True):
-                    if not df_custos.empty or not df_cobrancas.empty:
-                        st.markdown("### Evolução Financeira")
-                        st.caption("Faturamento e despesas ao longo dos meses.")
+                    st.markdown("### Evolução Financeira")
+                    st.caption("Faturamento e despesas nos últimos meses.")
 
+                    if not df_custos.empty or not df_cobrancas.empty:
                         frames_fluxo = []
 
                         if not df_custos.empty:
-                            dc = df_custos.groupby("mes_ano")["valor_total"].sum().reset_index()
+                            dc = (
+                                df_custos.groupby("mes_ano")["valor_total"]
+                                .sum()
+                                .reset_index()
+                            )
                             dc.columns = ["mes_ano", "valor"]
                             dc["tipo"] = "Despesas"
                             frames_fluxo.append(dc)
@@ -4270,14 +4915,23 @@ else:
                             df_cobrancas_graf = df_cobrancas[
                                 ~df_cobrancas["status"].isin(["Cancelada", "Não cobrar"])
                             ].copy()
-                            dr = df_cobrancas_graf.groupby("mes_ano")["_valor_dashboard"].sum().reset_index()
+                            dr = (
+                                df_cobrancas_graf.groupby("mes_ano")["_valor_dashboard"]
+                                .sum()
+                                .reset_index()
+                            )
                             dr.columns = ["mes_ano", "valor"]
                             dr["tipo"] = "Faturamento"
                             frames_fluxo.append(dr)
 
                         df_fluxo = pd.concat(frames_fluxo, ignore_index=True)
-                        df_fluxo["data_ordem"] = pd.to_datetime(df_fluxo["mes_ano"], format="%m/%Y", errors="coerce")
-                        df_fluxo = df_fluxo.dropna(subset=["data_ordem"]).sort_values("data_ordem")
+                        df_fluxo["data_ordem"] = pd.to_datetime(
+                            df_fluxo["mes_ano"], format="%m/%Y", errors="coerce"
+                        )
+                        df_fluxo = (
+                            df_fluxo.dropna(subset=["data_ordem"])
+                            .sort_values("data_ordem")
+                        )
 
                         if not df_fluxo.empty:
                             meses = df_fluxo["mes_ano"].drop_duplicates().tolist()[-12:]
@@ -4289,60 +4943,159 @@ else:
                                 y="valor",
                                 color="tipo",
                                 barmode="group",
-                                text="valor",
                                 color_discrete_map={
-                                    "Faturamento": PALETTE["green"],
-                                    "Despesas": PALETTE["red"]
-                                }
+                                    "Faturamento": "#1768E5",
+                                    "Despesas": "#8CA3C2",
+                                },
                             )
-                            fig_fluxo.update_traces(texttemplate="R$ %{text:,.0f}", textposition="outside")
+                            fig_fluxo.update_traces(
+                                hovertemplate="<b>%{x}</b><br>R$ %{y:,.2f}<extra></extra>",
+                                marker_line_width=0,
+                            )
                             fig_fluxo.update_layout(
-                                **PLOTLY_LAYOUT,
-                                height=285,
-                                xaxis=dict(title="", type="category"),
-                                yaxis=dict(title="", tickprefix="R$ "),
-                                legend=dict(title="", orientation="h", y=1.10, x=1, xanchor="right")
+                                **{
+                                    **PLOTLY_LAYOUT,
+                                    "margin": dict(l=10, r=10, t=35, b=10),
+                                },
+                                height=310,
+                                bargap=0.28,
+                                xaxis=dict(title="", type="category", showgrid=False),
+                                yaxis=dict(
+                                    title="",
+                                    tickprefix="R$ ",
+                                    gridcolor="#EDF2F7",
+                                    zeroline=False,
+                                ),
+                                legend=dict(
+                                    title="",
+                                    orientation="h",
+                                    y=1.10,
+                                    x=0,
+                                ),
                             )
-                            st.plotly_chart(fig_fluxo, use_container_width=True, config={"displayModeBar": False})
+                            st.plotly_chart(
+                                fig_fluxo,
+                                use_container_width=True,
+                                config={"displayModeBar": False},
+                            )
                         else:
                             st.info("Ainda não há histórico mensal suficiente.", icon=None)
                     else:
-                        st.markdown("### Visão Financeira")
-                        st.caption("Resumo compacto enquanto ainda não há movimentação financeira.")
-
                         vf1, vf2 = st.columns(2)
                         vf1.metric("Receita no mês", fmt_brl(faturamento_mes_atual))
                         vf2.metric("Despesa no mês", fmt_brl(custos_mes_atual))
-
-                        vf3, vf4 = st.columns(2)
-                        vf3.metric("Saldo do mês", fmt_brl(saldo_mes))
-                        vf4.metric("Cobranças vencidas", inadimplencia_qtd)
-
                         st.info(
-                            "Cadastre despesas ou cobranças para habilitar o gráfico de evolução mensal.",
-                            icon=None
+                            "Cadastre despesas ou cobranças para habilitar a evolução financeira.",
+                            icon=None,
                         )
+
+            with col_frota:
+                with st.container(border=True):
+                    st.markdown("### Disponibilidade da Frota")
+                    st.caption("Distribuição atual dos veículos por status.")
+
+                    if veiculos_totais > 0:
+                        df_pizza = pd.DataFrame({
+                            "Status": ["Disponível", "Alugado", "Manutenção"],
+                            "Quantidade": [
+                                veiculos_disponiveis,
+                                veiculos_alugados,
+                                veiculos_manutencao,
+                            ],
+                        })
+                        df_pizza = df_pizza[df_pizza["Quantidade"] > 0]
+
+                        fig_frota = px.pie(
+                            df_pizza,
+                            names="Status",
+                            values="Quantidade",
+                            hole=0.72,
+                            color="Status",
+                            color_discrete_map={
+                                "Disponível": "#17A673",
+                                "Alugado": "#1768E5",
+                                "Manutenção": "#F0A833",
+                            },
+                        )
+                        fig_frota.update_traces(
+                            textposition="none",
+                            hovertemplate="<b>%{label}</b><br>%{value} veículo(s)<extra></extra>",
+                        )
+                        fig_frota.add_annotation(
+                            text=f"<b>{veiculos_totais}</b><br><span style='font-size:11px'>veículos</span>",
+                            x=0.5,
+                            y=0.5,
+                            showarrow=False,
+                            font=dict(size=20, color="#153A66"),
+                        )
+                        fig_frota.update_layout(
+                            **{
+                                **PLOTLY_LAYOUT,
+                                "margin": dict(l=5, r=5, t=5, b=20),
+                            },
+                            height=242,
+                            showlegend=True,
+                            legend=dict(
+                                title="",
+                                orientation="h",
+                                y=-0.08,
+                                x=0.5,
+                                xanchor="center",
+                            ),
+                        )
+                        st.plotly_chart(
+                            fig_frota,
+                            use_container_width=True,
+                            config={"displayModeBar": False},
+                        )
+                    else:
+                        st.info("Nenhum veículo cadastrado.", icon=None)
+
+            # ── Contratos e saúde da frota ────────────────────────────────────────
+            st.markdown("<div style='height:18px'></div>", unsafe_allow_html=True)
+            col_contratos, col_saude = st.columns([1, 1])
+
+            with col_contratos:
+                with st.container(border=True):
+                    st.markdown("### Carteira de Contratos")
+                    st.caption("Leitura rápida da operação comercial.")
+
+                    st.markdown(
+                        f"""
+                        <div class="kineo-contract-row"><span>Receita mensal contratada</span><strong>{html.escape(fmt_brl(receita_contratada))}</strong></div>
+                        <div class="kineo-contract-row"><span>Contratos ativos</span><strong>{contratos_ativos}</strong></div>
+                        <div class="kineo-contract-row"><span>Vencendo em 30 dias</span><strong>{contratos_vencendo_30}</strong></div>
+                        <div class="kineo-contract-row"><span>Reservas em uso</span><strong>{reservas_em_uso}</strong></div>
+                        """,
+                        unsafe_allow_html=True,
+                    )
+
+                    if reservas_em_uso > 0:
+                        st.markdown("**Substituições temporárias**")
+                        for _, r in df_substituicoes_dash.head(3).iterrows():
+                            cliente = html.escape(str(r["cliente"]))
+                            principal = html.escape(str(r["placa_principal"]))
+                            reserva = html.escape(str(r["placa_substituto"]))
+                            st.caption(f"{cliente} · {principal} → {reserva}")
 
             with col_saude:
                 with st.container(border=True):
                     st.markdown("### Saúde da Frota")
-                    st.caption("Indicadores para manutenção e disponibilidade.")
+                    st.caption("Disponibilidade e manutenção preventiva.")
 
-                    qtd_revisao = len({r["placa"] for r in revisoes_proximas})
-                    veiculos_saudaveis = max(veiculos_totais - veiculos_manutencao - qtd_revisao, 0)
-
-                    s1, s2 = st.columns(2)
-                    s1.metric("Operação Normal", veiculos_saudaveis)
-                    s2.metric("Em Manutenção", veiculos_manutencao)
-
-                    s3, s4 = st.columns(2)
-                    s3.metric("Revisão Próxima", qtd_revisao)
-                    s4.metric("Reservas em Uso", reservas_em_uso)
+                    st.markdown(
+                        f"""
+                        <div class="kineo-health-row"><span>Operação normal</span><strong>{veiculos_saudaveis}</strong></div>
+                        <div class="kineo-health-row"><span>Em manutenção</span><strong>{veiculos_manutencao}</strong></div>
+                        <div class="kineo-health-row"><span>Revisão próxima</span><strong>{qtd_revisao}</strong></div>
+                        <div class="kineo-health-row"><span>Reservas em uso</span><strong>{reservas_em_uso}</strong></div>
+                        """,
+                        unsafe_allow_html=True,
+                    )
 
                     if revisoes_proximas:
-                        st.markdown("---")
-                        st.markdown("**Veículos que exigem atenção**")
-                        for revisao in revisoes_proximas[:4]:
+                        st.markdown("**Próximas atenções**")
+                        for revisao in revisoes_proximas[:3]:
                             st.caption(
                                 f"{revisao['placa']} · {revisao['servico']} · "
                                 f"{revisao['status']} · {revisao['detalhe']}"
@@ -4350,148 +5103,302 @@ else:
                     elif veiculos_manutencao == 0:
                         st.success("Nenhum alerta crítico de manutenção.", icon=None)
 
-            st.markdown("<br>", unsafe_allow_html=True)
+            # ── Custos e atalhos ──────────────────────────────────────────────────
+            st.markdown("<div style='height:18px'></div>", unsafe_allow_html=True)
+            col_custos, col_acoes = st.columns([1.55, 1])
 
-            # ── Linha final adaptativa: custos ou ações rápidas ─────────────────────
-            if not df_custos.empty:
-                col_custos, col_acoes = st.columns([1.35, 1])
+            with col_custos:
+                with st.container(border=True):
+                    st.markdown("### Maiores Custos por Veículo")
+                    st.caption("Veículos com maior impacto financeiro acumulado.")
 
-                with col_custos:
-                    with st.container(border=True):
-                        st.markdown("### Maiores Custos por Veículo")
-                        st.caption("Veículos com maior impacto financeiro.")
-
+                    if not df_custos.empty:
                         df_gastos = (
-                            df_custos.groupby(["veiculo_id", "placa", "modelo"], dropna=False)["valor_total"]
+                            df_custos.groupby(
+                                ["veiculo_id", "placa", "modelo"],
+                                dropna=False,
+                            )["valor_total"]
                             .sum()
                             .reset_index()
                             .sort_values("valor_total", ascending=False)
                             .head(5)
                         )
-
                         if not df_gastos.empty:
                             df_gastos["veiculo"] = (
                                 df_gastos["placa"].fillna("Sem placa").astype(str)
                                 + " · "
                                 + df_gastos["modelo"].fillna("").astype(str)
                             )
-
                             fig_gastos = px.bar(
                                 df_gastos.sort_values("valor_total"),
                                 x="valor_total",
                                 y="veiculo",
                                 orientation="h",
-                                text="valor_total",
-                                color_discrete_sequence=[PALETTE["indigo"]]
+                                color_discrete_sequence=["#3D78D8"],
                             )
-                            fig_gastos.update_traces(texttemplate="R$ %{text:,.0f}", textposition="outside")
+                            fig_gastos.update_traces(
+                                hovertemplate="<b>%{y}</b><br>R$ %{x:,.2f}<extra></extra>",
+                                marker_line_width=0,
+                            )
                             fig_gastos.update_layout(
-                                **PLOTLY_LAYOUT,
-                                height=245,
-                                xaxis=dict(title="", visible=False),
-                                yaxis=dict(title="")
+                                **{
+                                    **PLOTLY_LAYOUT,
+                                    "margin": dict(l=5, r=10, t=10, b=5),
+                                },
+                                height=250,
+                                xaxis=dict(
+                                    title="",
+                                    showgrid=True,
+                                    gridcolor="#EDF2F7",
+                                    tickprefix="R$ ",
+                                ),
+                                yaxis=dict(title=""),
                             )
-                            st.plotly_chart(fig_gastos, use_container_width=True, config={"displayModeBar": False})
-
-                with col_acoes:
-                    with st.container(border=True):
-                        st.markdown("### Ações Rápidas")
-                        st.caption("Atalhos para as rotinas mais frequentes.")
-
-                        st.button(
-                            "Registrar despesa",
-                            icon=":material/add_card:",
-                            use_container_width=True,
-                            on_click=set_menu,
-                            args=("Gestão de Custos",),
-                            key="dash_acao_custos"
-                        )
-                        st.button(
-                            "Abrir contrato",
-                            icon=":material/description:",
-                            use_container_width=True,
-                            on_click=set_menu,
-                            args=("Contratos e Locação",),
-                            key="dash_acao_contratos"
-                        )
-                        st.button(
-                            "Gerenciar frota",
-                            icon=":material/directions_car:",
-                            use_container_width=True,
-                            on_click=set_menu,
-                            args=("Gestão de Frota",),
-                            key="dash_acao_frota"
-                        )
-            else:
-                col_resumo, col_acoes = st.columns([1.35, 1])
-
-                with col_resumo:
-                    with st.container(border=True):
-                        st.markdown("### Resumo Operacional")
-                        st.caption("Situação atual da operação em um único bloco.")
-
-                        ro1, ro2, ro3 = st.columns(3)
-                        ro1.metric("Disponíveis", veiculos_disponiveis)
-                        ro2.metric("Contratos ativos", contratos_ativos)
-                        ro3.metric("Reservas em uso", reservas_em_uso)
-
+                            st.plotly_chart(
+                                fig_gastos,
+                                use_container_width=True,
+                                config={"displayModeBar": False},
+                            )
+                    else:
                         st.info(
-                            "Nenhuma despesa registrada. O ranking de custos aparecerá aqui após os primeiros lançamentos.",
-                            icon=None
+                            "O ranking aparecerá após os primeiros lançamentos de despesas.",
+                            icon=None,
                         )
 
-                with col_acoes:
-                    with st.container(border=True):
-                        st.markdown("### Ações Rápidas")
-                        st.caption("Comece pelas operações que alimentam o painel.")
+            with col_acoes:
+                with st.container(border=True):
+                    st.markdown("### Ações Rápidas")
+                    st.caption("Acesse as rotinas mais frequentes.")
 
-                        st.button(
-                            "Registrar primeira despesa",
-                            icon=":material/add_card:",
-                            use_container_width=True,
-                            on_click=set_menu,
-                            args=("Gestão de Custos",),
-                            key="dash_acao_primeiro_custo"
-                        )
-                        st.button(
-                            "Abrir contrato",
-                            icon=":material/description:",
-                            use_container_width=True,
-                            on_click=set_menu,
-                            args=("Contratos e Locação",),
-                            key="dash_acao_primeiro_contrato"
-                        )
-                        st.button(
-                            "Gerenciar frota",
-                            icon=":material/directions_car:",
-                            use_container_width=True,
-                            on_click=set_menu,
-                            args=("Gestão de Frota",),
-                            key="dash_acao_gerenciar_frota"
-
-                        )
+                    st.button(
+                        "Registrar despesa",
+                        icon=":material/add_card:",
+                        use_container_width=True,
+                        on_click=set_menu,
+                        args=("Gestão de Custos",),
+                        key="dash_v11_acao_custos",
+                    )
+                    st.button(
+                        "Abrir contratos",
+                        icon=":material/description:",
+                        use_container_width=True,
+                        on_click=set_menu,
+                        args=("Contratos e Locação",),
+                        key="dash_v11_acao_contratos",
+                    )
+                    st.button(
+                        "Gerenciar frota",
+                        icon=":material/directions_car:",
+                        use_container_width=True,
+                        on_click=set_menu,
+                        args=("Gestão de Frota",),
+                        key="dash_v11_acao_frota",
+                    )
+                    st.button(
+                        "Abrir cobranças",
+                        icon=":material/request_quote:",
+                        use_container_width=True,
+                        on_click=set_menu,
+                        args=("Gestão de Cobranças",),
+                        key="dash_v11_acao_cobrancas",
+                    )
 
         elif tela_ativa == "Gestão de Frota":
-            page_header("Gestão de Frota", "Cadastro, saúde e análise de gastos por veículo.")
+            aplicar_css_gestao_frota_v11()
+            st.markdown('<div class="kineo-frota-v11"></div>', unsafe_allow_html=True)
 
             df_veiculos = carregar_dados_tabela(
                 "SELECT * FROM veiculos WHERE empresa_id = :empresa_id AND COALESCE(ativo, 1)=1", emp_id
             )
             total = len(df_veiculos)
 
-            c1, c2, c3, c4 = st.columns(4)
-            c1.metric("Frota total",    total)
-            c2.metric("Disponíveis",    len(df_veiculos[df_veiculos["status"] == "Disponível"])  if total else 0)
-            c3.metric("Em contrato",    len(df_veiculos[df_veiculos["status"] == "Alugado"])     if total else 0)
-            c4.metric("Em manutenção",  len(df_veiculos[df_veiculos["status"] == "Manutenção"])  if total else 0)
+            qtd_disponiveis = (
+                len(df_veiculos[df_veiculos["status"] == "Disponível"])
+                if total else 0
+            )
+            qtd_alugados = (
+                len(df_veiculos[df_veiculos["status"] == "Alugado"])
+                if total else 0
+            )
+            qtd_manutencao = (
+                len(df_veiculos[df_veiculos["status"] == "Manutenção"])
+                if total else 0
+            )
+            ocupacao_frota = (qtd_alugados / total * 100) if total else 0.0
 
-            st.markdown("<br>", unsafe_allow_html=True)
+            st.markdown(
+                f"""
+                <div class="kineo-frota-hero">
+                    <div>
+                        <div class="kineo-frota-eyebrow">Operação da frota</div>
+                        <h1>Gestão de Frota</h1>
+                        <p>Cadastre veículos, acompanhe disponibilidade, custos e manutenção preventiva em um único ambiente.</p>
+                    </div>
+                    <div class="kineo-frota-total">
+                        <span>Veículos ativos</span>
+                        <strong>{total}</strong>
+                    </div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+
+            c1, c2, c3, c4 = st.columns(4)
+            with c1:
+                frota_stat_card("Frota total", total, "veículos ativos", "blue")
+            with c2:
+                frota_stat_card("Disponíveis", qtd_disponiveis, "prontos para operação", "green")
+            with c3:
+                frota_stat_card(
+                    "Em contrato",
+                    qtd_alugados,
+                    f"{ocupacao_frota:.1f}% de ocupação",
+                    "indigo",
+                )
+            with c4:
+                frota_stat_card("Em manutenção", qtd_manutencao, "atenção operacional", "amber")
             
-            tab_admin, tab_status, tab_gastos, tab_planos, tab_saude = st.tabs(["Cadastro de veículos", "Alterar status", "Análise de gastos", "Planos de manutenção", "Saúde da frota"])
+            tab_visao, tab_admin, tab_status, tab_gastos, tab_planos, tab_saude = st.tabs([
+                "Visão geral",
+                "Adicionar veículo",
+                "Alterar status",
+                "Análise de gastos",
+                "Planos de manutenção",
+                "Saúde da frota",
+            ])
+
+            # ── Aba: Visão geral operacional ─────────────────────────────────────
+            with tab_visao:
+                st.markdown(
+                    """
+                    <div class="kineo-frota-overview-head">
+                        <div>
+                            <h2>Catálogo operacional</h2>
+                            <p>Consulte rapidamente a situação e os principais dados de cada veículo.</p>
+                        </div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+
+                if total == 0:
+                    st.info(
+                        "A frota ainda está vazia. Use a aba **Adicionar veículo** para iniciar a operação.",
+                        icon=None,
+                    )
+                else:
+                    filtro_busca_col, filtro_status_col = st.columns([1.45, 1])
+                    busca_frota = filtro_busca_col.text_input(
+                        "Localizar veículo",
+                        placeholder="Busque por placa, modelo ou fabricante",
+                        key="frota_visao_busca",
+                    )
+                    status_existentes = sorted(
+                        df_veiculos["status"].dropna().astype(str).unique().tolist()
+                    )
+                    status_frota = filtro_status_col.multiselect(
+                        "Situação operacional",
+                        status_existentes,
+                        default=status_existentes,
+                        key="frota_visao_status",
+                    )
+
+                    df_catalogo = df_veiculos.copy()
+                    if status_frota:
+                        df_catalogo = df_catalogo[
+                            df_catalogo["status"].astype(str).isin(status_frota)
+                        ]
+                    else:
+                        df_catalogo = df_catalogo.iloc[0:0]
+
+                    termo_frota = str(busca_frota or "").strip().lower()
+                    if termo_frota:
+                        campos_busca = [
+                            coluna for coluna in ["placa", "modelo", "fabricante"]
+                            if coluna in df_catalogo.columns
+                        ]
+                        mascara_busca = pd.Series(False, index=df_catalogo.index)
+                        for coluna in campos_busca:
+                            mascara_busca = mascara_busca | (
+                                df_catalogo[coluna]
+                                .fillna("")
+                                .astype(str)
+                                .str.lower()
+                                .str.contains(termo_frota, regex=False)
+                            )
+                        df_catalogo = df_catalogo[mascara_busca]
+
+                    colunas_catalogo = [
+                        coluna for coluna in [
+                            "placa", "fabricante", "modelo", "ano_modelo",
+                            "combustivel", "transmissao", "km_atual", "status"
+                        ] if coluna in df_catalogo.columns
+                    ]
+                    catalogo_exibir = df_catalogo[colunas_catalogo].copy()
+                    catalogo_exibir = catalogo_exibir.rename(columns={
+                        "placa": "Placa",
+                        "fabricante": "Fabricante",
+                        "modelo": "Modelo",
+                        "ano_modelo": "Ano/modelo",
+                        "combustivel": "Combustível",
+                        "transmissao": "Transmissão",
+                        "km_atual": "KM atual",
+                        "status": "Situação",
+                    })
+
+                    tabela_col, insights_col = st.columns([2.7, 1])
+                    with tabela_col:
+                        with st.container(border=True):
+                            st.markdown(f"**{len(catalogo_exibir)} veículo(s) encontrado(s)**")
+                            st.caption("A lista respeita os filtros aplicados acima.")
+                            st.dataframe(
+                                catalogo_exibir,
+                                use_container_width=True,
+                                hide_index=True,
+                            )
+
+                    with insights_col:
+                        sem_plano = (
+                            int(df_veiculos["plano_manutencao_id"].isna().sum())
+                            if "plano_manutencao_id" in df_veiculos.columns else total
+                        )
+                        st.markdown(
+                            f"""
+                            <div class="kineo-frota-insight">
+                                <span>Disponibilidade</span>
+                                <strong>{qtd_disponiveis} veículo(s)</strong>
+                                <small>Prontos para uma nova operação ou contrato.</small>
+                            </div>
+                            <div style="height:10px"></div>
+                            <div class="kineo-frota-insight">
+                                <span>Manutenção</span>
+                                <strong>{qtd_manutencao} veículo(s)</strong>
+                                <small>Atualmente sinalizados em manutenção.</small>
+                            </div>
+                            <div style="height:10px"></div>
+                            <div class="kineo-frota-insight">
+                                <span>Plano preventivo</span>
+                                <strong>{sem_plano} sem plano</strong>
+                                <small>Cadastros que ainda precisam de um plano associado.</small>
+                            </div>
+                            """,
+                            unsafe_allow_html=True,
+                        )
 
             # ── Aba: Cadastro ─────────────────────────────────────────────────────
             with tab_admin:
-                col_cad_tipo1, col_cad_tipo2 = st.tabs(["Cadastro Individual", "Importação em Massa (.xls / .xlsx)"])
+                st.markdown(
+                    """
+                    <div class="kineo-frota-overview-head">
+                        <div>
+                            <h2>Entrada de veículos</h2>
+                            <p>Escolha entre o cadastro guiado de uma unidade ou a importação de uma frota.</p>
+                        </div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+                col_cad_tipo1, col_cad_tipo2 = st.tabs(["Cadastro guiado", "Importação em massa"])
 
                 with col_cad_tipo1:
                     with st.container(border=True):
@@ -5437,10 +6344,7 @@ else:
         # GESTÃO DE CUSTOS
         # ══════════════════════════════════════════════════════════════════════════
         elif tela_ativa == "Gestão de Custos":
-            page_header(
-                "Gestão de Custos",
-                "Registre despesas e gerencie os lançamentos financeiros da frota."
-            )
+            aplicar_css_modulos_v11()
 
             df_veiculos = carregar_dados_tabela(f"""
                 SELECT id, placa, modelo, km_atual, status, plano_manutencao_id
@@ -5448,6 +6352,51 @@ else:
                 WHERE empresa_id = :empresa_id AND COALESCE(ativo, 1)=1
                 ORDER BY modelo, placa
             """, emp_id)
+
+            df_custos_resumo = carregar_dados_tabela("""
+                SELECT c.id, c.data_custo, c.categoria, c.valor_total,
+                       v.placa, v.modelo
+                FROM custos c
+                LEFT JOIN veiculos v
+                  ON v.id=c.veiculo_id AND v.empresa_id=c.empresa_id
+                WHERE c.empresa_id=:empresa_id
+                ORDER BY c.data_custo DESC, c.id DESC
+            """, emp_id)
+            if not df_custos_resumo.empty:
+                df_custos_resumo["data_custo"] = pd.to_datetime(
+                    df_custos_resumo["data_custo"], errors="coerce"
+                )
+                df_custos_resumo["valor_total"] = pd.to_numeric(
+                    df_custos_resumo["valor_total"], errors="coerce"
+                ).fillna(0.0)
+                custos_total_resumo = float(df_custos_resumo["valor_total"].sum())
+                custos_mes_resumo = float(df_custos_resumo.loc[
+                    df_custos_resumo["data_custo"].dt.strftime("%m/%Y")
+                    == hoje_local().strftime("%m/%Y"),
+                    "valor_total",
+                ].sum())
+                ticket_custo_resumo = float(df_custos_resumo["valor_total"].mean())
+                categorias_custo_resumo = int(df_custos_resumo["categoria"].nunique())
+            else:
+                custos_total_resumo = custos_mes_resumo = ticket_custo_resumo = 0.0
+                categorias_custo_resumo = 0
+
+            module_hero(
+                "Controle financeiro",
+                "Gestão de Custos",
+                "Acompanhe o impacto financeiro da frota e registre novas despesas somente quando necessário.",
+                "Despesas no mês",
+                fmt_brl(custos_mes_resumo),
+            )
+            rc1, rc2, rc3, rc4 = st.columns(4)
+            with rc1:
+                module_stat_card("Acumulado", fmt_brl(custos_total_resumo), "histórico de despesas")
+            with rc2:
+                module_stat_card("Lançamentos", len(df_custos_resumo), "registros financeiros")
+            with rc3:
+                module_stat_card("Ticket médio", fmt_brl(ticket_custo_resumo), "valor por lançamento")
+            with rc4:
+                module_stat_card("Categorias usadas", categorias_custo_resumo, "classificações com movimento")
 
             if df_veiculos.empty:
                 st.warning(
@@ -5482,10 +6431,48 @@ else:
                     for _, r in df_veiculos.iterrows()
                 }
 
-                tab_lancar, tab_lancamentos = st.tabs([
+                tab_visao_custos, tab_lancar, tab_lancamentos = st.tabs([
+                    "Visão geral",
                     "Registrar despesa",
                     "Lançamentos financeiros"
                 ])
+
+                with tab_visao_custos:
+                    visao_custo_col, ranking_custo_col = st.columns([1.7, 1])
+                    with visao_custo_col:
+                        with st.container(border=True):
+                            st.markdown("### Movimentações recentes")
+                            st.caption("Últimos registros financeiros da frota.")
+                            if df_custos_resumo.empty:
+                                st.info("Nenhuma despesa registrada até o momento.", icon=None)
+                            else:
+                                recentes_custos = df_custos_resumo.head(12).copy()
+                                recentes_custos["Data"] = recentes_custos["data_custo"].dt.strftime("%d/%m/%Y")
+                                recentes_custos["Veículo"] = (
+                                    recentes_custos["placa"].fillna("Sem veículo").astype(str)
+                                    + " · "
+                                    + recentes_custos["modelo"].fillna("").astype(str)
+                                )
+                                recentes_custos["Valor"] = recentes_custos["valor_total"].apply(fmt_brl)
+                                st.dataframe(
+                                    recentes_custos[["Data", "Veículo", "categoria", "Valor"]].rename(
+                                        columns={"categoria": "Categoria"}
+                                    ),
+                                    use_container_width=True,
+                                    hide_index=True,
+                                )
+                    with ranking_custo_col:
+                        with st.container(border=True):
+                            st.markdown("### Impacto por categoria")
+                            st.caption("Onde a frota concentra mais despesas.")
+                            if df_custos_resumo.empty:
+                                st.info("O ranking aparecerá após o primeiro lançamento.", icon=None)
+                            else:
+                                ranking_custos = (
+                                    df_custos_resumo.groupby("categoria")["valor_total"]
+                                    .sum().sort_values(ascending=False).head(8)
+                                )
+                                st.bar_chart(ranking_custos)
 
                 # ──────────────────────────────────────────────────────────────
                 # REGISTRAR DESPESA
@@ -6499,10 +7486,7 @@ else:
         # GESTÃO DE COBRANÇAS
         # ══════════════════════════════════════════════════════════════════════════
         elif tela_ativa == "Gestão de Cobranças":
-            page_header(
-                "Gestão de Cobranças",
-                "Previsão de receitas, faturamento, recebimentos e resultado operacional por contrato."
-            )
+            aplicar_css_modulos_v11()
 
             STATUS_COBRANCA = [
                 "Pendente de emissão",
@@ -6542,10 +7526,66 @@ else:
                 ORDER BY c.ativo DESC, c.cliente, v.placa
             """, emp_id)
 
+            df_cobrancas_resumo = carregar_dados_tabela("""
+                SELECT status, valor_previsto, vencimento, mes_ano
+                FROM cobrancas_mensais
+                WHERE empresa_id=:empresa_id
+            """, emp_id)
+            if not df_cobrancas_resumo.empty:
+                df_cobrancas_resumo["status"] = (
+                    df_cobrancas_resumo["status"].fillna("").apply(normalizar_status_cobranca)
+                )
+                df_cobrancas_resumo["valor_previsto"] = pd.to_numeric(
+                    df_cobrancas_resumo["valor_previsto"], errors="coerce"
+                ).fillna(0.0)
+                df_cobrancas_resumo["vencimento"] = pd.to_datetime(
+                    df_cobrancas_resumo["vencimento"], errors="coerce"
+                )
+                cobrancas_validas_resumo = df_cobrancas_resumo[
+                    ~df_cobrancas_resumo["status"].isin(["Cancelada", "Não cobrar"])
+                ].copy()
+                previsto_mes_resumo = float(cobrancas_validas_resumo.loc[
+                    cobrancas_validas_resumo["mes_ano"] == hoje_local().strftime("%m/%Y"),
+                    "valor_previsto",
+                ].sum())
+                recebidas_resumo = int((cobrancas_validas_resumo["status"] == "Recebida").sum())
+                vencidas_resumo = int((
+                    cobrancas_validas_resumo["vencimento"].notna()
+                    & (cobrancas_validas_resumo["vencimento"] < pd.Timestamp(hoje_local()))
+                    & ~cobrancas_validas_resumo["status"].isin(["Recebida"])
+                ).sum())
+                pendentes_resumo = int(cobrancas_validas_resumo["status"].isin([
+                    "Pendente de emissão", "Emitida", "Enviada"
+                ]).sum())
+            else:
+                previsto_mes_resumo = 0.0
+                recebidas_resumo = vencidas_resumo = pendentes_resumo = 0
+
+            contratos_ativos_cob = (
+                int((df_contratos_fin["ativo"] == 1).sum())
+                if not df_contratos_fin.empty else 0
+            )
+            module_hero(
+                "Receita e recebimentos",
+                "Gestão de Cobranças",
+                "Acompanhe previsão, emissão e recebimento antes de acessar as rotinas de cobrança.",
+                "Previsto no mês",
+                fmt_brl(previsto_mes_resumo),
+            )
+            cb1, cb2, cb3, cb4 = st.columns(4)
+            with cb1:
+                module_stat_card("Contratos ativos", contratos_ativos_cob, "carteira geradora de receita")
+            with cb2:
+                module_stat_card("Pendentes", pendentes_resumo, "em emissão ou envio")
+            with cb3:
+                module_stat_card("Recebidas", recebidas_resumo, "cobranças liquidadas")
+            with cb4:
+                module_stat_card("Vencidas", vencidas_resumo, "exigem acompanhamento")
+
             tab_financeiro, tab_recorrentes, tab_mensal = st.tabs([
-                "Visão Financeira",
-                "Cobranças Recorrentes",
-                "Controle Mensal",
+                "Visão financeira",
+                "Regras recorrentes",
+                "Operação mensal",
             ])
 
             # ──────────────────────────────────────────────────────────────────────
@@ -8501,7 +9541,7 @@ else:
         # CONTRATOS E LOCAÇÃO
         # ══════════════════════════════════════════════════════════════════════════
         elif tela_ativa == "Contratos e Locação":
-            page_header("Gestão de Contratos", "Controle o ciclo de vida comercial da frota e as substituições temporárias.")
+            aplicar_css_modulos_v11()
 
             df_veiculos = carregar_dados_tabela(f"""
                 SELECT id, placa, modelo, status
@@ -8543,11 +9583,51 @@ else:
                 ORDER BY c.ativo DESC, c.data_inicio DESC
             """, emp_id)
 
+            if not df_contratos.empty:
+                contratos_ativos_df = df_contratos[df_contratos["ativo"] == 1].copy()
+                contratos_ativos_qtd = len(contratos_ativos_df)
+                contratos_encerrados_qtd = int((df_contratos["ativo"] == 0).sum())
+                receita_fixa_contratos = float(pd.to_numeric(
+                    contratos_ativos_df.loc[
+                        contratos_ativos_df["tipo_valor"] == "Fixo", "valor_mensal"
+                    ], errors="coerce"
+                ).fillna(0.0).sum())
+                fim_contratos = pd.to_datetime(
+                    contratos_ativos_df["data_fim"], errors="coerce"
+                )
+                vencendo_contratos = int((
+                    fim_contratos.notna()
+                    & (fim_contratos >= pd.Timestamp(hoje_local()))
+                    & (fim_contratos <= pd.Timestamp(hoje_local() + timedelta(days=30)))
+                ).sum())
+                reservas_contratos = int(contratos_ativos_df["substituicao_id"].notna().sum())
+            else:
+                contratos_ativos_qtd = contratos_encerrados_qtd = 0
+                vencendo_contratos = reservas_contratos = 0
+                receita_fixa_contratos = 0.0
+
+            module_hero(
+                "Ciclo comercial",
+                "Contratos e Locação",
+                "Acompanhe a carteira vigente e acesse abertura, finalização ou substituição apenas quando necessário.",
+                "Receita fixa mensal",
+                fmt_brl(receita_fixa_contratos),
+            )
+            ct1, ct2, ct3, ct4 = st.columns(4)
+            with ct1:
+                module_stat_card("Contratos ativos", contratos_ativos_qtd, "carteira vigente")
+            with ct2:
+                module_stat_card("Vencendo em 30 dias", vencendo_contratos, "atenção comercial")
+            with ct3:
+                module_stat_card("Reservas em uso", reservas_contratos, "substituições temporárias")
+            with ct4:
+                module_stat_card("Encerrados", contratos_encerrados_qtd, "histórico preservado")
+
             tab_visao, tab_novo, tab_editar, tab_substituicao = st.tabs([
-                "Painel Comercial",
-                "Abertura de Contrato",
-                "Finalização / Aditivos",
-                "Substituição / Manutenção"
+                "Visão comercial",
+                "Abrir contrato",
+                "Finalizar ou editar",
+                "Substituição temporária"
             ])
 
             # ── Aba 1: Visão Geral ────────────────────────────────────────────────
@@ -9085,14 +10165,67 @@ else:
         # ══════════════════════════════════════════════════════════════════════════
         elif tela_ativa == "Pessoas e Acessos":
             is_admin = st.session_state.get("perfil") == "admin"
-            page_header(
+            aplicar_css_modulos_v11()
+
+            df_pessoas_resumo = carregar_dados_tabela("""
+                SELECT COUNT(id) AS total,
+                       SUM(CASE WHEN COALESCE(ativo,1)=1 THEN 1 ELSE 0 END) AS ativos
+                FROM motoristas
+                WHERE empresa_id=:empresa_id
+            """, emp_id)
+            motoristas_total = int(pd.to_numeric(
+                df_pessoas_resumo["total"], errors="coerce"
+            ).fillna(0).iloc[0])
+            motoristas_ativos = int(pd.to_numeric(
+                df_pessoas_resumo["ativos"], errors="coerce"
+            ).fillna(0).iloc[0])
+            motoristas_inativos = max(motoristas_total - motoristas_ativos, 0)
+
+            usuarios_total = usuarios_ativos = 0
+            if is_admin:
+                df_usuarios_resumo = carregar_dados_tabela("""
+                    SELECT COUNT(id) AS total,
+                           SUM(CASE WHEN COALESCE(ativo,1)=1 THEN 1 ELSE 0 END) AS ativos
+                    FROM usuarios
+                    WHERE empresa_id=:empresa_id
+                """, emp_id)
+                usuarios_total = int(pd.to_numeric(
+                    df_usuarios_resumo["total"], errors="coerce"
+                ).fillna(0).iloc[0])
+                usuarios_ativos = int(pd.to_numeric(
+                    df_usuarios_resumo["ativos"], errors="coerce"
+                ).fillna(0).iloc[0])
+
+            module_hero(
+                "Equipe e segurança",
                 "Pessoas e Acessos",
                 (
-                    "Cadastre motoristas e gerencie as credenciais de quem utiliza o Kineo."
-                    if is_admin
-                    else "Cadastre e gerencie os motoristas utilizados nas rotinas operacionais."
-                )
+                    "Visualize a equipe antes de acessar cadastros, credenciais e rotinas administrativas."
+                    if is_admin else
+                    "Visualize e mantenha os motoristas utilizados nas rotinas operacionais."
+                ),
+                "Pessoas cadastradas",
+                motoristas_total + usuarios_total,
             )
+
+            if is_admin:
+                ps1, ps2, ps3, ps4 = st.columns(4)
+                with ps1:
+                    module_stat_card("Motoristas ativos", motoristas_ativos, "disponíveis nas rotinas")
+                with ps2:
+                    module_stat_card("Motoristas inativos", motoristas_inativos, "histórico preservado")
+                with ps3:
+                    module_stat_card("Usuários ativos", usuarios_ativos, "acessos liberados")
+                with ps4:
+                    module_stat_card("Credenciais", usuarios_total, "total de usuários")
+            else:
+                ps1, ps2, ps3 = st.columns(3)
+                with ps1:
+                    module_stat_card("Motoristas", motoristas_total, "cadastros da empresa")
+                with ps2:
+                    module_stat_card("Ativos", motoristas_ativos, "disponíveis nas rotinas")
+                with ps3:
+                    module_stat_card("Inativos", motoristas_inativos, "histórico preservado")
 
             if is_admin:
                 tab_motoristas, tab_usuarios = st.tabs([
@@ -9112,139 +10245,195 @@ else:
 
 
         elif tela_ativa == "Meu Perfil":
-            page_header("Meu Perfil", "Gerencie seus dados pessoais e a segurança da sua conta.")
+            aplicar_css_modulos_v11()
+            df_perfil_atual = carregar_dados_tabela("""
+                SELECT nome, login, email, perfil, ativo, ultimo_login
+                FROM usuarios
+                WHERE empresa_id=:empresa_id AND id=:usuario_id
+            """, emp_id, {"usuario_id": int(st.session_state["usuario_id"])})
+            perfil_atual = (
+                df_perfil_atual.iloc[0].to_dict()
+                if not df_perfil_atual.empty else {}
+            )
+            perfil_nome_raw = perfil_atual.get("nome")
+            perfil_login_raw = perfil_atual.get("login")
+            perfil_email_raw = perfil_atual.get("email")
+            perfil_tipo_raw = perfil_atual.get("perfil")
+            perfil_nome = str(
+                st.session_state.get("nome") or "Usuário"
+                if pd.isna(perfil_nome_raw) or not str(perfil_nome_raw or "").strip()
+                else perfil_nome_raw
+            )
+            perfil_login = str(
+                st.session_state.get("login") or "—"
+                if pd.isna(perfil_login_raw) or not str(perfil_login_raw or "").strip()
+                else perfil_login_raw
+            )
+            perfil_email = str(
+                st.session_state.get("email") or "Não informado"
+                if pd.isna(perfil_email_raw) or not str(perfil_email_raw or "").strip()
+                else perfil_email_raw
+            )
+            perfil_tipo = str(
+                st.session_state.get("perfil") or "operador"
+                if pd.isna(perfil_tipo_raw) or not str(perfil_tipo_raw or "").strip()
+                else perfil_tipo_raw
+            ).title()
+            perfil_ativo_num = pd.to_numeric(
+                pd.Series([perfil_atual.get("ativo")]), errors="coerce"
+            ).fillna(0).iloc[0]
+            perfil_ativo = "Ativo" if int(perfil_ativo_num) == 1 else "Revogado"
+            ultimo_acesso_perfil = (
+                formatar_serie_datetime_local(
+                    df_perfil_atual["ultimo_login"], "%d/%m/%Y %H:%M"
+                ).iloc[0]
+                if not df_perfil_atual.empty else "—"
+            )
+            avatar_perfil_bytes = ler_bytes_privado(avatar_path)
+            if avatar_perfil_bytes:
+                avatar_perfil_html = (
+                    '<img src="data:image/png;base64,'
+                    + base64.b64encode(avatar_perfil_bytes).decode()
+                    + '">'
+                )
+            else:
+                avatar_perfil_html = html.escape(perfil_nome[:1].upper() or "U")
 
-            with st.container(border=True):
-                c_p1, c_p2 = st.columns([1, 3])
+            module_hero(
+                "Conta pessoal",
+                "Meu Perfil",
+                "Consulte sua identidade no Kineo e acesse edição ou segurança somente quando necessário.",
+                "Perfil de acesso",
+                perfil_tipo,
+            )
 
-                with c_p1:
-                    st.markdown("**Foto de Perfil**")
-                    avatar_perfil_bytes = ler_bytes_privado(avatar_path)
-                    if avatar_perfil_bytes:
-                        st.image(avatar_perfil_bytes, use_container_width=True)
-                    else:
-                        st.info("Sem foto", icon=None)
+            tab_perfil_visao, tab_perfil_dados, tab_perfil_seguranca = st.tabs([
+                "Visão geral",
+                "Editar perfil",
+                "Segurança da conta",
+            ])
 
-                    novo_avatar = st.file_uploader(
-                        "Alterar foto",
-                        type=["png", "jpg", "jpeg"],
-                        label_visibility="collapsed",
-                        key="perfil_avatar_upload",
+            with tab_perfil_visao:
+                perfil_card_col, perfil_info_col = st.columns([1.15, 1])
+                with perfil_card_col:
+                    st.markdown(
+                        f"""
+                        <div class="kineo-account-card">
+                            <div class="kineo-account-avatar">{avatar_perfil_html}</div>
+                            <div>
+                                <h2>{html.escape(perfil_nome)}</h2>
+                                <p>{html.escape(perfil_email)}</p>
+                                <span class="kineo-account-role">{html.escape(perfil_tipo)}</span>
+                            </div>
+                        </div>
+                        """,
+                        unsafe_allow_html=True,
                     )
-                    if st.button("Salvar Imagem", use_container_width=True, key="perfil_salvar_avatar"):
-                        if novo_avatar:
-                            ok, erro, _avatar_ref = salvar_imagem_segura(
-                                novo_avatar, f"logos/avatars/avatar_{st.session_state['usuario_id']}.png", max_mb=5
-                            )
-                            if ok:
-                                session = SessionLocal()
-                                try:
-                                    registrar_auditoria(
-                                        session,
-                                        emp_id,
-                                        st.session_state["usuario_id"],
-                                        "AVATAR_ATUALIZADO",
-                                        "Usuario",
-                                        st.session_state["usuario_id"],
-                                    )
-                                    session.commit()
-                                finally:
-                                    session.close()
-                                st.success("Foto atualizada!")
-                                time.sleep(0.4)
-                                st.rerun()
-                            else:
-                                st.error(erro, icon=None)
-                        else:
-                            st.error("Nenhuma imagem selecionada.", icon=None)
-
-                with c_p2:
-                    st.markdown("**Informações de Apresentação**")
-                    with st.form("form_meu_nome"):
-                        novo_nome = st.text_input(
-                            "Nome de Exibição",
-                            value=st.session_state["nome"],
-                            max_chars=120,
+                with perfil_info_col:
+                    with st.container(border=True):
+                        st.markdown("**Informações da conta**")
+                        st.markdown(
+                            f"""
+                            <div class="kineo-info-row"><span>Usuário</span><strong>{html.escape(perfil_login)}</strong></div>
+                            <div class="kineo-info-row"><span>Status</span><strong>{html.escape(perfil_ativo)}</strong></div>
+                            <div class="kineo-info-row"><span>Último acesso</span><strong>{html.escape(str(ultimo_acesso_perfil))}</strong></div>
+                            """,
+                            unsafe_allow_html=True,
                         )
 
-                        if st.form_submit_button("Atualizar Nome"):
-                            novo_nome_limpo = str(novo_nome or "").strip()
-                            if len(novo_nome_limpo) < 2:
-                                st.error("Informe um nome válido.", icon=None)
-                            else:
-                                session = SessionLocal()
-                                try:
-                                    u = tenant_get(
-                                        session,
-                                        Usuario,
-                                        st.session_state["usuario_id"],
-                                        emp_id,
-                                    )
-                                    if u is None:
-                                        st.error("Usuário não encontrado.", icon=None)
-                                    else:
-                                        u.nome = novo_nome_limpo
+            with tab_perfil_dados:
+                with st.container(border=True):
+                    c_p1, c_p2 = st.columns([1, 2.4])
+                    with c_p1:
+                        st.markdown("**Foto de perfil**")
+                        if avatar_perfil_bytes:
+                            st.image(avatar_perfil_bytes, use_container_width=True)
+                        else:
+                            st.info("Sem foto", icon=None)
+                        novo_avatar = st.file_uploader(
+                            "Alterar foto",
+                            type=["png", "jpg", "jpeg"],
+                            label_visibility="collapsed",
+                            key="perfil_avatar_upload",
+                        )
+                        if st.button("Salvar imagem", use_container_width=True, key="perfil_salvar_avatar"):
+                            if novo_avatar:
+                                ok, erro, _avatar_ref = salvar_imagem_segura(
+                                    novo_avatar, f"logos/avatars/avatar_{st.session_state['usuario_id']}.png", max_mb=5
+                                )
+                                if ok:
+                                    session = SessionLocal()
+                                    try:
                                         registrar_auditoria(
-                                            session,
-                                            emp_id,
-                                            u.id,
-                                            "PERFIL_NOME_ATUALIZADO",
-                                            "Usuario",
-                                            u.id,
+                                            session, emp_id, st.session_state["usuario_id"],
+                                            "AVATAR_ATUALIZADO", "Usuario", st.session_state["usuario_id"],
                                         )
                                         session.commit()
-                                        st.session_state["nome"] = novo_nome_limpo
-                                        st.success("Nome atualizado!")
-                                        time.sleep(0.4)
-                                        st.rerun()
-                                except Exception:
-                                    session.rollback()
-                                    st.error("Não foi possível atualizar o nome.", icon=None)
-                                finally:
-                                    session.close()
+                                    finally:
+                                        session.close()
+                                    st.success("Foto atualizada!")
+                                    time.sleep(0.4)
+                                    st.rerun()
+                                else:
+                                    st.error(erro, icon=None)
+                            else:
+                                st.error("Nenhuma imagem selecionada.", icon=None)
 
-                    st.markdown("---")
-                    st.markdown("**Segurança da Conta**")
+                    with c_p2:
+                        st.markdown("**Nome de apresentação**")
+                        st.caption("Este nome é exibido na navegação e nos registros operacionais.")
+                        with st.form("form_meu_nome"):
+                            novo_nome = st.text_input(
+                                "Nome de exibição",
+                                value=st.session_state["nome"],
+                                max_chars=120,
+                            )
+                            if st.form_submit_button("Atualizar nome"):
+                                novo_nome_limpo = str(novo_nome or "").strip()
+                                if len(novo_nome_limpo) < 2:
+                                    st.error("Informe um nome válido.", icon=None)
+                                else:
+                                    session = SessionLocal()
+                                    try:
+                                        u = tenant_get(session, Usuario, st.session_state["usuario_id"], emp_id)
+                                        if u is None:
+                                            st.error("Usuário não encontrado.", icon=None)
+                                        else:
+                                            u.nome = novo_nome_limpo
+                                            registrar_auditoria(session, emp_id, u.id, "PERFIL_NOME_ATUALIZADO", "Usuario", u.id)
+                                            session.commit()
+                                            st.session_state["nome"] = novo_nome_limpo
+                                            st.success("Nome atualizado!")
+                                            time.sleep(0.4)
+                                            st.rerun()
+                                    except Exception:
+                                        session.rollback()
+                                        st.error("Não foi possível atualizar o nome.", icon=None)
+                                    finally:
+                                        session.close()
+
+            with tab_perfil_seguranca:
+                with st.container(border=True):
+                    st.markdown("### Alterar senha")
                     st.caption(
-                        f"A troca de senha está disponível para todos os perfis. "
                         f"Use uma frase-senha de {PASSWORD_MIN_LENGTH} a {PASSWORD_MAX_LENGTH} caracteres."
                     )
-
                     with st.form("form_minha_senha"):
-                        senha_atual = st.text_input(
-                            "Senha atual",
-                            type="password",
-                            max_chars=PASSWORD_MAX_LENGTH,
-                        )
+                        senha_atual = st.text_input("Senha atual", type="password", max_chars=PASSWORD_MAX_LENGTH)
                         ns1 = st.text_input(
-                            "Nova senha",
-                            type="password",
-                            max_chars=PASSWORD_MAX_LENGTH,
+                            "Nova senha", type="password", max_chars=PASSWORD_MAX_LENGTH,
                             placeholder=f"Mínimo {PASSWORD_MIN_LENGTH} caracteres",
                         )
-                        ns2 = st.text_input(
-                            "Confirmar nova senha",
-                            type="password",
-                            max_chars=PASSWORD_MAX_LENGTH,
-                        )
-
-                        if st.form_submit_button("Atualizar Senha"):
+                        ns2 = st.text_input("Confirmar nova senha", type="password", max_chars=PASSWORD_MAX_LENGTH)
+                        if st.form_submit_button("Atualizar senha"):
                             erros_senha = validar_nova_senha(
-                                ns1,
-                                st.session_state.get("login", ""),
-                                st.session_state.get("nome", ""),
+                                ns1, st.session_state.get("login", ""), st.session_state.get("nome", "")
                             )
                             if ns1 != ns2:
                                 erros_senha.append("As novas senhas não coincidem.")
-
                             session = SessionLocal()
                             try:
-                                u = tenant_get(
-                                    session,
-                                    Usuario,
-                                    st.session_state["usuario_id"],
-                                    emp_id,
-                                )
+                                u = tenant_get(session, Usuario, st.session_state["usuario_id"], emp_id)
                                 if u is None or int(u.ativo or 0) != 1:
                                     st.error("Usuário não encontrado ou acesso revogado.", icon=None)
                                 elif not verify_password(senha_atual, u.senha):
@@ -9260,12 +10449,7 @@ else:
                                     u.tentativas_login = 0
                                     u.bloqueado_ate = None
                                     registrar_auditoria(
-                                        session,
-                                        emp_id,
-                                        u.id,
-                                        "SENHA_ALTERADA",
-                                        "Usuario",
-                                        u.id,
+                                        session, emp_id, u.id, "SENHA_ALTERADA", "Usuario", u.id,
                                         "Alteração pelo Meu Perfil",
                                     )
                                     session.commit()
@@ -9398,25 +10582,92 @@ else:
         # CONFIGURAÇÕES (ADMIN)
         # ══════════════════════════════════════════════════════════════════════════
         elif tela_ativa == "Configurações":
-            page_header("Configurações Globais", "Identidade visual, segurança institucional e auditoria.")
+            aplicar_css_modulos_v11()
 
             if st.session_state["perfil"] != "admin":
+                module_hero(
+                    "Administração",
+                    "Configurações",
+                    "Esta área concentra identidade institucional e registros administrativos.",
+                    "Acesso",
+                    "Restrito",
+                )
                 st.error("Acesso Negado: privilégio administrativo requerido.", icon=None)
             else:
-                tab_logo, tab_auditoria = st.tabs([
-                    "Branding Institucional",
+                session_config = SessionLocal()
+                try:
+                    empresa_config = session_config.get(Empresa, emp_id)
+                    try:
+                        eventos_auditoria = (
+                            session_config.query(Auditoria)
+                            .filter(Auditoria.empresa_id == emp_id)
+                            .count()
+                        )
+                    except Exception:
+                        session_config.rollback()
+                        eventos_auditoria = 0
+                finally:
+                    session_config.close()
+
+                nome_atual = (
+                    empresa_config.nome_fantasia
+                    if empresa_config and empresa_config.nome_fantasia else "Kineo"
+                )
+                logo_configurado = bool(empresa_config and empresa_config.logo_path)
+
+                module_hero(
+                    "Administração do ambiente",
+                    "Configurações",
+                    "Consulte a identidade institucional e os controles do ambiente antes de realizar alterações.",
+                    "Ambiente",
+                    str(APP_ENV or "Não informado").title(),
+                )
+                cf1, cf2, cf3, cf4 = st.columns(4)
+                with cf1:
+                    module_stat_card("Empresa", nome_atual, "identidade exibida no Kineo")
+                with cf2:
+                    module_stat_card("Logotipo", "Configurado" if logo_configurado else "Pendente", "branding institucional")
+                with cf3:
+                    module_stat_card("Auditoria", eventos_auditoria, "eventos registrados")
+                with cf4:
+                    module_stat_card("Perfil necessário", "Administrador", "acesso restrito")
+
+                tab_config_visao, tab_logo, tab_auditoria = st.tabs([
+                    "Visão geral",
+                    "Identidade visual",
                     "Auditoria",
                 ])
+
+                with tab_config_visao:
+                    cfg_identidade, cfg_seguranca = st.columns(2)
+                    with cfg_identidade:
+                        with st.container(border=True):
+                            st.markdown("### Identidade institucional")
+                            st.caption("Informações que representam a empresa na interface.")
+                            st.markdown(
+                                f"""
+                                <div class="kineo-info-row"><span>Nome de exibição</span><strong>{html.escape(str(nome_atual))}</strong></div>
+                                <div class="kineo-info-row"><span>Logotipo</span><strong>{'Configurado' if logo_configurado else 'Não configurado'}</strong></div>
+                                """,
+                                unsafe_allow_html=True,
+                            )
+                    with cfg_seguranca:
+                        with st.container(border=True):
+                            st.markdown("### Governança do ambiente")
+                            st.caption("Controles administrativos já ativos nesta empresa.")
+                            st.markdown(
+                                f"""
+                                <div class="kineo-info-row"><span>Isolamento</span><strong>Por empresa</strong></div>
+                                <div class="kineo-info-row"><span>Eventos de auditoria</span><strong>{eventos_auditoria}</strong></div>
+                                <div class="kineo-info-row"><span>Acesso</span><strong>Somente administradores</strong></div>
+                                """,
+                                unsafe_allow_html=True,
+                            )
 
                 with tab_logo:
                     with st.container(border=True):
                         st.markdown("**Identidade Visual da Empresa**")
                         st.caption("Atualize a Razão Social e o logotipo exibidos na interface.")
-
-                        session_nome = SessionLocal()
-                        empresa_b = session_nome.get(Empresa, emp_id)
-                        nome_atual = empresa_b.nome_fantasia if empresa_b else "Kineo"
-                        session_nome.close()
 
                         with st.form("form_branding"):
                             novo_nome = st.text_input(
