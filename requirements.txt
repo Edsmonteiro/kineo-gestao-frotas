@@ -10,3 +10,4 @@ openpyxl
 argon2-cffi>=25.1.0,<26
 # Adicionar ao requirements.txt existente para homologação/produção V10
 boto3>=1.40,<2.0
+streamlit-js-eval>=0.1.7,<0.2
