@@ -700,6 +700,19 @@ css_template = f"""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
 
+/* Tabelas de consulta: não permitem ordenar, ocultar, redimensionar ou fixar colunas. */
+[data-testid="stDataFrame"] button,
+[data-testid="stDataFrame"] [role="button"] {
+    display: none !important;
+    pointer-events: none !important;
+}
+
+/* Gráficos são exibidos como painéis somente leitura. */
+.js-plotly-plot .modebar,
+.js-plotly-plot .plotly-notifier {
+    display: none !important;
+}
+
 /* ── Reset & Base ── */
 html, body, [class*="css"] {{
     font-family: 'Inter', sans-serif;
@@ -6397,10 +6410,7 @@ else:
                                         "valor_total": "Valor (R$)",
                                     },
                                 )
-                                fig_ranking_custos.update_layout(
-                                    **PLOTLY_LAYOUT,
-                                    margin=dict(l=10, r=10, t=20, b=10),
-                                )
+                                fig_ranking_custos.update_layout(**PLOTLY_LAYOUT)
                                 st.plotly_chart(
                                     fig_ranking_custos,
                                     use_container_width=True,
