@@ -177,25 +177,25 @@ def aplicar_css_login():
     st.markdown(
         """
 <style>
-[data-testid="stSidebar"] { display: none !important; }
-[data-testid="collapsedControl"] { display: none !important; }
-header[data-testid="stHeader"] { display: none !important; }
-[data-testid="stDecoration"],
-[data-testid="stStatusWidget"] { display: none !important; }
+body:has(.kineo-login-left) [data-testid="stSidebar"],
+body:has(.kineo-login-left) [data-testid="collapsedControl"],
+body:has(.kineo-login-left) header[data-testid="stHeader"],
+body:has(.kineo-login-left) [data-testid="stDecoration"],
+body:has(.kineo-login-left) [data-testid="stStatusWidget"] { display: none !important; }
 
-[data-testid="stMain"] {
+[data-testid="stAppViewContainer"]:has(.kineo-login-left) [data-testid="stMain"] {
     min-height: 100dvh !important;
 }
 
-[data-testid="stAppViewContainer"] {
+[data-testid="stAppViewContainer"]:has(.kineo-login-left) {
     background: linear-gradient(135deg, #E9F1FC 0%, #F7FAFF 55%, #E7F0FC 100%) !important;
     background-image: none !important;
     --kineo-sidebar-space: 0px !important;
 }
 
-[data-testid="stAppViewContainer"] > section.main,
-[data-testid="stAppViewContainer"] > .main,
-[data-testid="stMain"] {
+[data-testid="stAppViewContainer"]:has(.kineo-login-left) > section.main,
+[data-testid="stAppViewContainer"]:has(.kineo-login-left) > .main,
+[data-testid="stAppViewContainer"]:has(.kineo-login-left) [data-testid="stMain"] {
     margin-left: 0 !important;
     width: 100% !important;
     max-width: none !important;
@@ -1268,6 +1268,69 @@ label {{
     color: #6B7280; 
     font-size: 0.875rem; 
     margin: 0.25rem 0 0; 
+}}
+
+/* Layout interno adaptado a telefones: conteúdo nunca fica comprimido
+   pelo menu desktop e colunas passam a ser lidas em sequência. */
+@media (max-width: 768px) {{
+    [data-testid="stSidebar"] {{
+        display: none !important;
+    }}
+
+    [data-testid="stAppViewContainer"] {{
+        --kineo-sidebar-space: 0px !important;
+    }}
+
+    [data-testid="stAppViewContainer"] > section.main,
+    [data-testid="stAppViewContainer"] > .main,
+    [data-testid="stMain"] {{
+        margin-left: 0 !important;
+        width: 100% !important;
+    }}
+
+    .block-container {{
+        padding: 0.9rem 0.85rem 2rem !important;
+    }}
+
+    [data-testid="stHorizontalBlock"] {{
+        flex-wrap: wrap !important;
+        gap: 0.85rem !important;
+    }}
+
+    [data-testid="stHorizontalBlock"] > [data-testid="stColumn"] {{
+        width: 100% !important;
+        min-width: 100% !important;
+        flex: 1 1 100% !important;
+    }}
+
+    [data-testid="stVerticalBlockBorderWrapper"]:has(.kineo-mobile-nav-marker) {{
+        display: block !important;
+        margin: 0 0 0.9rem !important;
+        border: 1px solid #D8E6F7 !important;
+        border-radius: 14px !important;
+        background: #FFFFFF !important;
+        box-shadow: 0 7px 20px rgba(31, 68, 112, .06) !important;
+    }}
+
+    [data-testid="stVerticalBlockBorderWrapper"]:has(.kineo-mobile-nav-marker) [data-testid="stSelectbox"] {{
+        padding: 0 0.7rem 0.65rem !important;
+    }}
+
+    .kineo-mobile-nav-marker {{
+        display: block;
+        padding: 0.7rem 0.7rem 0.15rem;
+        color: #1768E5;
+        font-size: .68rem;
+        font-weight: 800;
+        letter-spacing: .1em;
+        text-transform: uppercase;
+    }}
+}}
+
+@media (min-width: 769px) {{
+    [data-testid="stVerticalBlockBorderWrapper"]:has(.kineo-mobile-nav-marker) {{
+        display: none !important;
+    }}
 }}
 </style>
 """
@@ -3123,6 +3186,17 @@ def set_privacidade():
 def toggle_pin():
     st.session_state["sidebar_pinned"] = not st.session_state["sidebar_pinned"]
 
+
+def navegar_menu_mobile():
+    """Aplica a opção escolhida no seletor de navegação para telas pequenas."""
+    destino = st.session_state.get("mobile_navigation")
+    if destino == "Configurações":
+        set_config()
+    elif destino == "Política de Privacidade":
+        set_privacidade()
+    elif destino:
+        set_menu(destino)
+
 def efetuar_logout():
     encerrar_sessao(expirada=False)
 
@@ -4010,6 +4084,10 @@ else:
     termos_login_dialog = _conteudo_termos_login
 
 
+# Mantém o CSS do login presente durante o rerun que troca a tela pública
+# pelo app autenticado, evitando a breve renderização sem estilo.
+aplicar_css_login()
+
 # A escrita de "lembrar usuário/e-mail" é processada somente depois que o
 # submit já terminou e a sessão está autenticada, evitando duplicação visual.
 processar_persistencia_login_pendente()
@@ -4018,7 +4096,6 @@ processar_persistencia_login_pendente()
 # 1 · TELA DE LOGIN — UX V10.3
 # ══════════════════════════════════════════════════════════════════════════════
 if not st.session_state["autenticado"]:
-    aplicar_css_login()
 
     # O componente de localStorage retorna de forma assíncrona e pode provocar um rerun.
     # Apenas o identificador é lembrado; senha, tenant e tokens nunca são persistidos aqui.
@@ -4326,6 +4403,33 @@ elif st.session_state["forcar_troca_senha"]:
 else:
     emp_id = int(st.session_state["empresa_id"])
     tela_ativa = st.session_state.get("ultimo_menu", "Painel Gerencial")
+
+    # Navegação equivalente ao menu lateral para celular.
+    opcoes_mobile = [
+        "Painel Gerencial",
+        "Gestão de Frota",
+        "Gestão de Custos",
+        "Contratos e Locação",
+        "Gestão de Cobranças",
+        "Pessoas e Acessos",
+    ]
+    if st.session_state.get("perfil") == "admin":
+        opcoes_mobile.append("Configurações")
+    opcoes_mobile.append("Política de Privacidade")
+
+    if st.session_state.get("_mobile_menu_sync") != tela_ativa:
+        st.session_state["mobile_navigation"] = tela_ativa
+        st.session_state["_mobile_menu_sync"] = tela_ativa
+
+    with st.container(border=True):
+        st.markdown('<div class="kineo-mobile-nav-marker">Navegação</div>', unsafe_allow_html=True)
+        st.selectbox(
+            "Ir para",
+            opcoes_mobile,
+            key="mobile_navigation",
+            label_visibility="collapsed",
+            on_change=navegar_menu_mobile,
+        )
 
     # Caminho do Avatar Pessoal do Usuário Logado
     avatar_path = referencia_storage(f"logos/avatars/avatar_{st.session_state['usuario_id']}.png")
