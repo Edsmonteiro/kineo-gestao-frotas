@@ -1273,23 +1273,47 @@ label {{
 /* Layout interno adaptado a telefones: conteúdo nunca fica comprimido
    pelo menu desktop e colunas passam a ser lidas em sequência. */
 @media (max-width: 768px) {{
+    /* Mantém o menu que já existe, em uma faixa compacta de ícones. */
     [data-testid="stSidebar"] {{
-        display: none !important;
+        display: block !important;
+        width: 64px !important;
+        min-width: 64px !important;
+        max-width: 64px !important;
+        overflow: hidden !important;
     }}
 
     [data-testid="stAppViewContainer"] {{
-        --kineo-sidebar-space: 0px !important;
+        --kineo-sidebar-space: 64px !important;
     }}
 
     [data-testid="stAppViewContainer"] > section.main,
     [data-testid="stAppViewContainer"] > .main,
     [data-testid="stMain"] {{
-        margin-left: 0 !important;
-        width: 100% !important;
+        margin-left: 64px !important;
+        width: calc(100% - 64px) !important;
     }}
 
     .block-container {{
         padding: 0.9rem 0.85rem 2rem !important;
+    }}
+
+    [data-testid="stSidebar"] .sidebar-brand-text,
+    [data-testid="stSidebar"] .profile-text,
+    [data-testid="stSidebar"] .sidebar-spacer,
+    [data-testid="stSidebar"] [data-testid="stButton"] button p {{
+        display: none !important;
+    }}
+
+    [data-testid="stSidebar"] [data-testid="stButton"] {{
+        width: 48px !important;
+        margin: 0 auto !important;
+    }}
+
+    [data-testid="stSidebar"] [data-testid="stButton"] button {{
+        width: 48px !important;
+        min-width: 48px !important;
+        padding: .5rem !important;
+        justify-content: center !important;
     }}
 
     [data-testid="stHorizontalBlock"] {{
@@ -1301,35 +1325,6 @@ label {{
         width: 100% !important;
         min-width: 100% !important;
         flex: 1 1 100% !important;
-    }}
-
-    [data-testid="stVerticalBlockBorderWrapper"]:has(.kineo-mobile-nav-marker) {{
-        display: block !important;
-        margin: 0 0 0.9rem !important;
-        border: 1px solid #D8E6F7 !important;
-        border-radius: 14px !important;
-        background: #FFFFFF !important;
-        box-shadow: 0 7px 20px rgba(31, 68, 112, .06) !important;
-    }}
-
-    [data-testid="stVerticalBlockBorderWrapper"]:has(.kineo-mobile-nav-marker) [data-testid="stSelectbox"] {{
-        padding: 0 0.7rem 0.65rem !important;
-    }}
-
-    .kineo-mobile-nav-marker {{
-        display: block;
-        padding: 0.7rem 0.7rem 0.15rem;
-        color: #1768E5;
-        font-size: .68rem;
-        font-weight: 800;
-        letter-spacing: .1em;
-        text-transform: uppercase;
-    }}
-}}
-
-@media (min-width: 769px) {{
-    [data-testid="stVerticalBlockBorderWrapper"]:has(.kineo-mobile-nav-marker) {{
-        display: none !important;
     }}
 }}
 </style>
