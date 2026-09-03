@@ -3187,16 +3187,6 @@ def toggle_pin():
     st.session_state["sidebar_pinned"] = not st.session_state["sidebar_pinned"]
 
 
-def navegar_menu_mobile():
-    """Aplica a opção escolhida no seletor de navegação para telas pequenas."""
-    destino = st.session_state.get("mobile_navigation")
-    if destino == "Configurações":
-        set_config()
-    elif destino == "Política de Privacidade":
-        set_privacidade()
-    elif destino:
-        set_menu(destino)
-
 def efetuar_logout():
     encerrar_sessao(expirada=False)
 
@@ -4403,33 +4393,6 @@ elif st.session_state["forcar_troca_senha"]:
 else:
     emp_id = int(st.session_state["empresa_id"])
     tela_ativa = st.session_state.get("ultimo_menu", "Painel Gerencial")
-
-    # Navegação equivalente ao menu lateral para celular.
-    opcoes_mobile = [
-        "Painel Gerencial",
-        "Gestão de Frota",
-        "Gestão de Custos",
-        "Contratos e Locação",
-        "Gestão de Cobranças",
-        "Pessoas e Acessos",
-    ]
-    if st.session_state.get("perfil") == "admin":
-        opcoes_mobile.append("Configurações")
-    opcoes_mobile.append("Política de Privacidade")
-
-    if st.session_state.get("_mobile_menu_sync") != tela_ativa:
-        st.session_state["mobile_navigation"] = tela_ativa
-        st.session_state["_mobile_menu_sync"] = tela_ativa
-
-    with st.container(border=True):
-        st.markdown('<div class="kineo-mobile-nav-marker">Navegação</div>', unsafe_allow_html=True)
-        st.selectbox(
-            "Ir para",
-            opcoes_mobile,
-            key="mobile_navigation",
-            label_visibility="collapsed",
-            on_change=navegar_menu_mobile,
-        )
 
     # Caminho do Avatar Pessoal do Usuário Logado
     avatar_path = referencia_storage(f"logos/avatars/avatar_{st.session_state['usuario_id']}.png")
