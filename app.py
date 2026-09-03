@@ -1273,47 +1273,24 @@ label {{
 /* Layout interno adaptado a telefones: conteúdo nunca fica comprimido
    pelo menu desktop e colunas passam a ser lidas em sequência. */
 @media (max-width: 768px) {{
-    /* Mantém o menu que já existe, em uma faixa compacta de ícones. */
+    /* No celular, o conteúdo ocupa toda a largura disponível. */
     [data-testid="stSidebar"] {{
-        display: block !important;
-        width: 64px !important;
-        min-width: 64px !important;
-        max-width: 64px !important;
-        overflow: hidden !important;
+        display: none !important;
     }}
 
     [data-testid="stAppViewContainer"] {{
-        --kineo-sidebar-space: 64px !important;
+        --kineo-sidebar-space: 0px !important;
     }}
 
     [data-testid="stAppViewContainer"] > section.main,
     [data-testid="stAppViewContainer"] > .main,
     [data-testid="stMain"] {{
-        margin-left: 64px !important;
-        width: calc(100% - 64px) !important;
+        margin-left: 0 !important;
+        width: 100% !important;
     }}
 
     .block-container {{
         padding: 0.9rem 0.85rem 2rem !important;
-    }}
-
-    [data-testid="stSidebar"] .sidebar-brand-text,
-    [data-testid="stSidebar"] .profile-text,
-    [data-testid="stSidebar"] .sidebar-spacer,
-    [data-testid="stSidebar"] [data-testid="stButton"] button p {{
-        display: none !important;
-    }}
-
-    [data-testid="stSidebar"] [data-testid="stButton"] {{
-        width: 48px !important;
-        margin: 0 auto !important;
-    }}
-
-    [data-testid="stSidebar"] [data-testid="stButton"] button {{
-        width: 48px !important;
-        min-width: 48px !important;
-        padding: .5rem !important;
-        justify-content: center !important;
     }}
 
     [data-testid="stHorizontalBlock"] {{
@@ -1325,6 +1302,11 @@ label {{
         width: 100% !important;
         min-width: 100% !important;
         flex: 1 1 100% !important;
+    }}
+
+    .profile-wrapper,
+    .sidebar-brand-wrapper {{
+        display: none !important;
     }}
 }}
 </style>
