@@ -5937,42 +5937,42 @@ else:
                                     
                                     with ga:
                                         if not df_comb.empty:
-                                            fig = px.bar(
+                                            fig_comb = px.bar(
                                                 df_comb, 
                                                 x="Mes_Ano", 
                                                 y="valor_total", 
                                                 text="valor_total", 
                                                 color_discrete_sequence=[PALETTE["green"]]
                                             )
-                                            fig.update_traces(texttemplate="R$ %{text:,.0f}", textposition="outside")
-                                            fig.update_layout(
+                                            fig_comb.update_traces(texttemplate="R$ %{text:,.0f}", textposition="outside")
+                                            fig_comb.update_layout(
                                                 **PLOTLY_LAYOUT, 
                                                 title_text="Combustível", 
                                                 height=220, 
                                                 xaxis=dict(title="", type="category"), 
                                                 yaxis=dict(visible=False)
                                             )
-                                            st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False, "scrollZoom": False, "staticPlot": True})
+                                            st.plotly_chart(fig_comb, use_container_width=True, config={"displayModeBar": False, "scrollZoom": False, "staticPlot": True}, key=f"custos_combustivel_{v['id']}")
                                         else:
                                             st.caption("Sem abastecimentos.")
                                             
                                     with gb:
                                         if not df_outr.empty:
-                                            fig = px.bar(
+                                            fig_outros = px.bar(
                                                 df_outr, 
                                                 x="Mes_Ano", 
                                                 y="valor_total", 
                                                 color="categoria", 
                                                 color_discrete_sequence=[PALETTE["indigo"], PALETTE["amber"], PALETTE["slate"]]
                                             )
-                                            fig.update_layout(
+                                            fig_outros.update_layout(
                                                 **PLOTLY_LAYOUT, 
                                                 title_text="Manutenção e Outros", 
                                                 height=220, 
                                                 xaxis=dict(title="", type="category"), 
                                                 yaxis=dict(visible=False)
                                             )
-                                            st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False, "scrollZoom": False, "staticPlot": True})
+                                            st.plotly_chart(fig_outros, use_container_width=True, config={"displayModeBar": False, "scrollZoom": False, "staticPlot": True}, key=f"custos_outros_{v['id']}")
                                         else:
                                             st.caption("Sem outras despesas.")
                                 else:
