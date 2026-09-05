@@ -671,6 +671,16 @@ for key, default in [
     ("credencial_temporaria", None),
     ("login_identifier_prefill", ""),
     ("login_remember_loaded", False),
+    ("pagina_frota", "Visão da Frota"),
+    ("menu_frota_aberto", False),
+    ("pagina_custos", "Visão de Custos"),
+    ("menu_custos_aberto", False),
+    ("pagina_contratos", "Visão de Contratos"),
+    ("menu_contratos_aberto", False),
+    ("pagina_cobrancas", "Visão Financeira"),
+    ("menu_cobrancas_aberto", False),
+    ("pagina_pessoas", "Motoristas"),
+    ("menu_pessoas_aberto", False),
     ("login_remember_pending", None),
     ("uploader_key", 0), # Chave para resetar o uploader de planilhas
     ("custos_uploader_version", 0), # Chave para limpar o comprovante após registrar despesa
@@ -698,6 +708,7 @@ TEXT_OPACITY = "1" if pinned else "0"
 TEXT_VISIBILITY = "visible" if pinned else "hidden"
 BUTTON_WIDTH = "calc(100% - 34px)" if pinned else "48px"
 POINTER_EVENTS = "auto" if pinned else "none"
+SIDEBAR_COLLAPSE_DELAY = "0.10s" if not pinned else "0s"
 
 css_template = f"""
 <style>
@@ -777,7 +788,7 @@ a.header-anchor {{
     width: {SIDEBAR_WIDTH} !important;
     min-width: {SIDEBAR_WIDTH} !important;
     max-width: {SIDEBAR_WIDTH} !important;
-    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
+    transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1) {SIDEBAR_COLLAPSE_DELAY}, min-width 0.3s cubic-bezier(0.4, 0, 0.2, 1) {SIDEBAR_COLLAPSE_DELAY}, max-width 0.3s cubic-bezier(0.4, 0, 0.2, 1) {SIDEBAR_COLLAPSE_DELAY} !important;
     overflow-x: hidden !important;
     position: fixed !important;
     height: 100vh !important;
@@ -809,8 +820,8 @@ a.header-anchor {{
     padding-left: 0 !important;
     box-sizing: border-box !important;
     transition:
-        margin-left 0.3s cubic-bezier(0.4, 0, 0.2, 1),
-        width 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
+        margin-left 0.3s cubic-bezier(0.4, 0, 0.2, 1) {SIDEBAR_COLLAPSE_DELAY},
+        width 0.3s cubic-bezier(0.4, 0, 0.2, 1) {SIDEBAR_COLLAPSE_DELAY} !important;
 }}
 
 /*
@@ -822,12 +833,18 @@ body:has([data-testid="stSidebar"]:hover) [data-testid="stAppViewContainer"] {{
     --kineo-sidebar-space: 260px;
 }}
 
+body:has([data-testid="stSidebar"]:hover) [data-testid="stAppViewContainer"] > section.main,
+body:has([data-testid="stSidebar"]:hover) [data-testid="stAppViewContainer"] > .main,
+body:has([data-testid="stSidebar"]:hover) [data-testid="stMain"] {{
+    transition-delay: 0s !important;
+}}
+
 /* Força a barra lateral a colar no topo, removendo o gap nativo do Streamlit */
 [data-testid="stSidebar"] .stScrollToBottomContainer > div:first-child {{
     display: flex;
     flex-direction: column;
     min-height: 100vh;
-    padding-top: 2rem !important; 
+    padding-top: 18px !important; 
 }}
 
 .sidebar-brand-wrapper {{
@@ -839,6 +856,7 @@ body:has([data-testid="stSidebar"]:hover) [data-testid="stAppViewContainer"] {{
     width: {SIDEBAR_WIDTH}; 
     margin-bottom: 1rem;
     padding-top: 0;
+    padding-right: 44px;
     padding-bottom: 1rem;
     overflow: hidden;
     white-space: nowrap;
@@ -877,6 +895,57 @@ body:has([data-testid="stSidebar"]:hover) [data-testid="stAppViewContainer"] {{
     margin: 0 !important; 
 }}
 
+.sidebar-brand-subtitle {{
+    margin-top: 3px;
+    color: #64748B;
+    font-size: 0.66rem;
+    font-weight: 700;
+    letter-spacing: 0.14em;
+}}
+
+.sidebar-nav-section {{
+    max-height: {"24px" if pinned else "0"};
+    margin: {"12px 0 4px 13px" if pinned else "0"};
+    overflow: hidden;
+    color: #64748B;
+    font-size: 0.66rem;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    line-height: 20px;
+    opacity: {TEXT_OPACITY};
+    visibility: {TEXT_VISIBILITY};
+    white-space: nowrap;
+    transition: opacity 0.2s, max-height 0.2s, margin 0.2s;
+}}
+
+[data-testid="stSidebar"] .st-key-nav_pin {{
+    position: fixed !important;
+    top: 16px;
+    left: {"212px" if pinned else "34px"};
+    z-index: 80;
+}}
+
+[data-testid="stSidebar"] .st-key-nav_pin button {{
+    width: 36px !important;
+    min-width: 36px !important;
+    height: 36px !important;
+    min-height: 36px !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    justify-content: center !important;
+    border-radius: 8px !important;
+    color: #94A3B8 !important;
+}}
+
+[data-testid="stSidebar"] .st-key-nav_pin button p {{
+    display: none !important;
+}}
+
+[data-testid="stSidebar"] .st-key-nav_pin button span.material-symbols-rounded {{
+    margin: 0 !important;
+    font-size: 1.25rem !important;
+}}
+
 [data-testid="stSidebar"] .stButton > button {{
     width: {BUTTON_WIDTH} !important;
     min-width: 48px !important;
@@ -887,8 +956,10 @@ body:has([data-testid="stSidebar"]:hover) [data-testid="stAppViewContainer"] {{
     align-items: center; 
     justify-content: flex-start;
     padding-left: 12px !important;
-    margin-left: 1px !important; 
+    margin-left: 0 !important; 
     margin-bottom: 8px !important;
+    box-sizing: border-box !important;
+    position: relative !important;
     overflow: hidden; 
     white-space: nowrap;
     background-color: transparent !important;
@@ -903,40 +974,160 @@ body:has([data-testid="stSidebar"]:hover) [data-testid="stAppViewContainer"] {{
     color: #F8FAFC !important; 
 }}
 
-[data-testid="stSidebar"] .stButton > button span.material-symbols-rounded {{ 
-    font-size: 1.6rem !important; 
-    margin-right: 16px !important; 
-}}
-
-[data-testid="stSidebar"] .stButton > button p {{ 
-    opacity: {TEXT_OPACITY}; 
-    visibility: {TEXT_VISIBILITY};
-    transition: opacity 0.2s; 
-    font-weight: 500 !important; 
-}}
-
 [data-testid="stSidebar"] .stButton > button[kind="primary"] {{
     background-color: #1E293B !important; 
     color: #FFFFFF !important;
-    border-left: 4px solid #6366F1 !important; 
-    border-radius: 0 8px 8px 0 !important; 
-    margin-left: -16px !important; 
-    padding-left: 29px !important; 
+    border: none !important; 
+    border-radius: 8px !important; 
+    margin-left: 0 !important; 
+    padding-left: 12px !important; 
 }}
 
-/* Link discreto de Privacidade/Cookies no rodapé operacional da sidebar */
-[data-testid="stSidebar"] .st-key-nav_privacidade button {{
-    height: 36px !important;
-    min-height: 36px !important;
-    color: #64748B !important;
-    font-size: 0.75rem !important;
-    margin-top: 2px !important;
-    margin-bottom: 4px !important;
-}}
-
-[data-testid="stSidebar"] .st-key-nav_privacidade button:hover {{
-    color: #CBD5E1 !important;
-    background-color: rgba(255,255,255,0.04) !important;
+/* Camada visual exclusiva da navegação desktop; o botão só recebe o clique. */
+@media (min-width: 769px) {{
+    [data-testid="stSidebar"] [class*="st-key-kineo_nav_"][data-testid="stVerticalBlockBorderWrapper"],
+    [data-testid="stSidebar"] [class*="st-key-kineo_nav_"] [data-testid="stVerticalBlockBorderWrapper"] {{
+        background: transparent !important;
+        border: 0 !important;
+        border-radius: 0 !important;
+        box-shadow: none !important;
+        padding: 0 !important;
+    }}
+    [data-testid="stSidebar"] [class*="st-key-kineo_nav_"] {{
+        position: relative !important;
+        width: 100% !important;
+        min-width: 0 !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        gap: 0 !important;
+        border: 0 !important;
+        box-shadow: none !important;
+        background: transparent !important;
+    }}
+    [data-testid="stSidebar"] [class*="st-key-kineo_nav_"] [data-testid="stVerticalBlock"] {{
+        gap: 0 !important;
+    }}
+    [data-testid="stSidebar"] .kineo-nav-line {{
+        box-sizing: border-box;
+        display: flex;
+        align-items: center;
+        justify-content: {"flex-start" if pinned else "center"};
+        gap: {"12px" if pinned else "0"};
+        height: 48px;
+        padding: {"0 12px" if pinned else "0"};
+        border-radius: 8px;
+        background: transparent;
+        color: #94A3B8;
+        font-family: inherit;
+        font-size: 14px;
+        font-weight: 500;
+        white-space: nowrap;
+        overflow: hidden;
+        pointer-events: none;
+    }}
+    [data-testid="stSidebar"] .kineo-nav-icon {{
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex: 0 0 24px;
+        width: 24px;
+        font-family: "Material Symbols Rounded";
+        font-size: 24px;
+        font-weight: normal;
+        line-height: 1;
+        font-feature-settings: "liga";
+    }}
+    [data-testid="stSidebar"] .kineo-nav-label {{
+        display: {"block" if pinned else "none"};
+        min-width: 0;
+        flex: 1 1 auto;
+        text-align: left;
+    }}
+    [data-testid="stSidebar"] .kineo-nav-chevron {{
+        display: {"flex" if pinned else "none"};
+        flex: 0 0 20px;
+        margin-left: auto;
+        font-family: "Material Symbols Rounded";
+        font-size: 20px;
+        line-height: 1;
+        font-feature-settings: "liga";
+    }}
+    [data-testid="stSidebar"] .kineo-nav-active {{
+        background: #1E293B;
+        color: #F8FAFC;
+        box-shadow: inset 4px 0 #6366F1;
+    }}
+    [data-testid="stSidebar"] [class*="st-key-kineo_nav_sub_"] {{
+        display: {"block" if pinned else "none"} !important;
+        margin-left: 24px !important;
+        width: calc(100% - 24px) !important;
+    }}
+    [data-testid="stSidebar"] .kineo-nav-sub {{
+        height: 36px;
+        font-size: 13px;
+        background: rgba(30, 41, 59, 0.62);
+    }}
+    [data-testid="stSidebar"] .kineo-nav-sub .kineo-nav-icon {{
+        flex-basis: 20px;
+        width: 20px;
+        font-size: 18px;
+    }}
+    [data-testid="stSidebar"] .kineo-nav-sub.kineo-nav-active {{
+        background: rgba(99, 102, 241, 0.20);
+        box-shadow: none;
+    }}
+    [data-testid="stSidebar"] .kineo-nav-privacy {{
+        height: 36px;
+        font-size: 12px;
+        color: #64748B;
+    }}
+    [data-testid="stSidebar"] [class*="st-key-kineo_nav_"]:hover .kineo-nav-line {{
+        background-color: #1E293B;
+        color: #F8FAFC;
+    }}
+    [data-testid="stSidebar"]:hover .kineo-nav-line {{
+        justify-content: flex-start;
+        gap: 12px;
+        padding: 0 12px;
+    }}
+    [data-testid="stSidebar"]:hover .kineo-nav-label {{
+        display: block;
+    }}
+    [data-testid="stSidebar"]:hover .kineo-nav-chevron {{
+        display: flex;
+    }}
+    [data-testid="stSidebar"]:hover [class*="st-key-kineo_nav_sub_"] {{
+        display: block !important;
+    }}
+    /* Área clicável nativa, independente da geometria do ícone e do texto. */
+    [data-testid="stSidebar"][data-testid="stSidebar"] [class*="st-key-kineo_nav_"] [class*="st-key-nav_"],
+    [data-testid="stSidebar"][data-testid="stSidebar"] [class*="st-key-kineo_nav_"] [data-testid="stButton"],
+    [data-testid="stSidebar"][data-testid="stSidebar"] [class*="st-key-kineo_nav_"] .stButton {{
+        position: absolute !important;
+        inset: 0 !important;
+        width: 100% !important;
+        height: 100% !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        z-index: 5 !important;
+    }}
+    [data-testid="stSidebar"][data-testid="stSidebar"] [class*="st-key-kineo_nav_"] button {{
+        position: absolute !important;
+        inset: 0 !important;
+        width: 100% !important;
+        min-width: 0 !important;
+        height: 100% !important;
+        min-height: 0 !important;
+        padding: 0 !important;
+        margin: 0 !important;
+        opacity: 0 !important;
+        pointer-events: auto !important;
+        z-index: 1 !important;
+    }}
+    [data-testid="stSidebar"] [class*="st-key-kineo_nav_"]:has(button:focus-visible) .kineo-nav-line {{
+        outline: 2px solid #6366F1;
+        outline-offset: -2px;
+    }}
 }}
 
 .privacy-section {{
@@ -1033,7 +1224,7 @@ body:has([data-testid="stSidebar"]:hover) [data-testid="stAppViewContainer"] {{
     color: #94A3B8; 
 }}
 
-[data-testid="stSidebar"] [data-testid="stVerticalBlock"] > div:nth-last-child(2) button {{
+[data-testid="stSidebar"] [data-testid="stVerticalBlock"] > div:nth-last-child(2) button:not([class*="st-key-kineo_nav_"] *) {{
     position: fixed !important; 
     bottom: 10px !important; 
     left: 11px !important;   
@@ -1051,15 +1242,15 @@ body:has([data-testid="stSidebar"]:hover) [data-testid="stAppViewContainer"] {{
     margin: 0 !important;
 }}
 
-[data-testid="stSidebar"] [data-testid="stVerticalBlock"] > div:nth-last-child(2) button * {{
+[data-testid="stSidebar"] [data-testid="stVerticalBlock"] > div:nth-last-child(2) button:not([class*="st-key-kineo_nav_"] *) * {{
     display: none !important; 
 }}
 
-[data-testid="stSidebar"] [data-testid="stVerticalBlock"] > div:nth-last-child(2) button:hover {{
+[data-testid="stSidebar"] [data-testid="stVerticalBlock"] > div:nth-last-child(2) button:not([class*="st-key-kineo_nav_"] *):hover {{
     background-color: rgba(255, 255, 255, 0.08) !important; 
 }}
 
-[data-testid="stSidebar"] [data-testid="stVerticalBlock"] > div:nth-last-child(1) button {{
+[data-testid="stSidebar"] [data-testid="stVerticalBlock"] > div:nth-last-child(1) button:not([class*="st-key-kineo_nav_"] *) {{
     position: fixed !important; 
     bottom: 20px !important; 
     left: 204px !important;  
@@ -1081,11 +1272,11 @@ body:has([data-testid="stSidebar"]:hover) [data-testid="stAppViewContainer"] {{
     transition: opacity 0.2s !important;
 }}
 
-[data-testid="stSidebar"] [data-testid="stVerticalBlock"] > div:nth-last-child(1) button p {{
+[data-testid="stSidebar"] [data-testid="stVerticalBlock"] > div:nth-last-child(1) button:not([class*="st-key-kineo_nav_"] *) p {{
     display: none !important; 
 }}
 
-[data-testid="stSidebar"] [data-testid="stVerticalBlock"] > div:nth-last-child(1) button span {{
+[data-testid="stSidebar"] [data-testid="stVerticalBlock"] > div:nth-last-child(1) button:not([class*="st-key-kineo_nav_"] *) span {{
     margin: 0 !important;
     font-size: 1.5rem !important;
 }}
@@ -1094,6 +1285,7 @@ body:has([data-testid="stSidebar"]:hover) [data-testid="stAppViewContainer"] {{
     width: 260px !important; 
     min-width: 260px !important; 
     max-width: 260px !important;
+    transition-delay: 0s !important;
     box-shadow: 4px 0 20px rgba(0,0,0,0.4);
 }}
 
@@ -1106,8 +1298,8 @@ body:has([data-testid="stSidebar"]:hover) [data-testid="stAppViewContainer"] {{
     width: 260px !important;
 }}
 
-[data-testid="stSidebar"]:hover [data-testid="stVerticalBlock"] > div:nth-last-child(2) button,
-.sidebar-pinned[data-testid="stSidebar"] [data-testid="stVerticalBlock"] > div:nth-last-child(2) button {{
+[data-testid="stSidebar"]:hover [data-testid="stVerticalBlock"] > div:nth-last-child(2) button:not([class*="st-key-kineo_nav_"] *),
+.sidebar-pinned[data-testid="stSidebar"] [data-testid="stVerticalBlock"] > div:nth-last-child(2) button:not([class*="st-key-kineo_nav_"] *) {{
     width: 180px !important; 
 }}
 
@@ -1118,14 +1310,62 @@ body:has([data-testid="stSidebar"]:hover) [data-testid="stAppViewContainer"] {{
     visibility: visible !important;
 }}
 
-[data-testid="stSidebar"]:hover [data-testid="stVerticalBlock"] > div:nth-last-child(1) button,
-.sidebar-pinned[data-testid="stSidebar"] [data-testid="stVerticalBlock"] > div:nth-last-child(1) button {{
+[data-testid="stSidebar"]:hover .sidebar-nav-section {{
+    max-height: 24px;
+    margin: 12px 0 4px 13px;
+    opacity: 1 !important;
+    visibility: visible !important;
+}}
+
+[data-testid="stSidebar"]:hover .st-key-nav_pin {{
+    left: 212px;
+}}
+
+[data-testid="stSidebar"]:hover [data-testid="stVerticalBlock"] > div:nth-last-child(1) button:not([class*="st-key-kineo_nav_"] *),
+.sidebar-pinned[data-testid="stSidebar"] [data-testid="stVerticalBlock"] > div:nth-last-child(1) button:not([class*="st-key-kineo_nav_"] *) {{
     opacity: 1 !important; 
     pointer-events: auto !important;
 }}
 
-[data-testid="stSidebar"] [data-testid="stVerticalBlock"] > div:nth-last-child(1) button:hover {{
+[data-testid="stSidebar"] [data-testid="stVerticalBlock"] > div:nth-last-child(1) button:not([class*="st-key-kineo_nav_"] *):hover {{
     background: rgba(239, 68, 68, 0.15) !important; 
+}}
+
+/* Hitbox integral da navegação desktop, após os ajustes legados de hover. */
+@media (min-width: 769px) {{
+    [data-testid="stSidebar"] [class*="st-key-kineo_nav_"] [data-testid="stElementContainer"]:has([data-testid="stButton"]),
+    [data-testid="stSidebar"] [class*="st-key-kineo_nav_"] [data-testid="stElementContainer"]:has(.stButton),
+    [data-testid="stSidebar"] [class*="st-key-kineo_nav_"] .element-container:has(.stButton),
+    [data-testid="stSidebar"] [class*="st-key-kineo_nav_"] [data-testid="stButton"],
+    [data-testid="stSidebar"] [class*="st-key-kineo_nav_"] .stButton {{
+        position: absolute !important;
+        inset: 0 !important;
+        width: 100% !important;
+        min-width: 100% !important;
+        max-width: none !important;
+        height: 100% !important;
+        min-height: 100% !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        z-index: 10 !important;
+    }}
+    [data-testid="stSidebar"] [class*="st-key-kineo_nav_"] [data-testid="stButton"] > button,
+    [data-testid="stSidebar"] [class*="st-key-kineo_nav_"] .stButton > button,
+    [data-testid="stSidebar"]:hover [class*="st-key-kineo_nav_"] [data-testid="stButton"] > button,
+    [data-testid="stSidebar"]:hover [class*="st-key-kineo_nav_"] .stButton > button {{
+        position: absolute !important;
+        inset: 0 !important;
+        width: 100% !important;
+        min-width: 100% !important;
+        max-width: none !important;
+        height: 100% !important;
+        min-height: 100% !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        opacity: 0 !important;
+        pointer-events: auto !important;
+        z-index: 10 !important;
+    }}
 }}
 
 [data-testid="stVerticalBlockBorderWrapper"] {{ 
@@ -1307,6 +1547,41 @@ label {{
     .profile-wrapper,
     .sidebar-brand-wrapper {{
         display: none !important;
+    }}
+}}
+
+/* Override final: hitbox integral limitado ao retângulo recuado dos subitens. */
+@media (min-width: 769px) {{
+    [data-testid="stSidebar"][data-testid="stSidebar"] [class*="st-key-kineo_nav_sub_"] [data-testid="stElementContainer"]:has([data-testid="stButton"]),
+    [data-testid="stSidebar"][data-testid="stSidebar"] [class*="st-key-kineo_nav_sub_"] [data-testid="stElementContainer"]:has(.stButton),
+    [data-testid="stSidebar"][data-testid="stSidebar"] [class*="st-key-kineo_nav_sub_"] .element-container:has(.stButton),
+    [data-testid="stSidebar"][data-testid="stSidebar"] [class*="st-key-kineo_nav_sub_"] [data-testid="stButton"],
+    [data-testid="stSidebar"][data-testid="stSidebar"] [class*="st-key-kineo_nav_sub_"] .stButton {{
+        position: absolute !important;
+        inset: 0 !important;
+        width: 100% !important;
+        min-width: 100% !important;
+        max-width: none !important;
+        height: 100% !important;
+        min-height: 100% !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        z-index: 20 !important;
+    }}
+    [data-testid="stSidebar"][data-testid="stSidebar"] [class*="st-key-kineo_nav_sub_"] [data-testid="stButton"] > button,
+    [data-testid="stSidebar"][data-testid="stSidebar"] [class*="st-key-kineo_nav_sub_"] .stButton > button {{
+        position: absolute !important;
+        inset: 0 !important;
+        width: 100% !important;
+        min-width: 100% !important;
+        max-width: none !important;
+        height: 100% !important;
+        min-height: 100% !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        opacity: 0 !important;
+        pointer-events: auto !important;
+        z-index: 20 !important;
     }}
 }}
 </style>
@@ -3145,12 +3420,84 @@ PALETTE = dict(
 def set_menu(menu_name):
     st.session_state["ultimo_menu"] = menu_name
     st.session_state["tela_config"] = False
+    if menu_name == "Gestão de Frota":
+        st.session_state["pagina_frota"] = "Visão da Frota"
+        st.session_state["menu_frota_aberto"] = True
+    else:
+        st.session_state["menu_frota_aberto"] = False
+    for modulo, slug, padrao in [
+        ("Gestão de Custos", "custos", "Visão de Custos"),
+        ("Contratos e Locação", "contratos", "Visão de Contratos"),
+        ("Gestão de Cobranças", "cobrancas", "Visão Financeira"),
+        ("Pessoas e Acessos", "pessoas", "Motoristas"),
+    ]:
+        st.session_state[f"menu_{slug}_aberto"] = menu_name == modulo
+        if menu_name == modulo:
+            st.session_state[f"pagina_{slug}"] = padrao
     if st.session_state.get("privacidade_pendente"):
         st.session_state["privacidade_dialog_suspenso"] = False
 
 def set_config():
     st.session_state["tela_config"] = True
     st.session_state["ultimo_menu"] = "Configurações"
+
+def set_pagina_frota(pagina):
+    set_menu("Gestão de Frota")
+    st.session_state["pagina_frota"] = pagina
+    st.session_state["menu_frota_aberto"] = True
+
+def toggle_menu_frota():
+    if st.session_state.get("ultimo_menu") == "Gestão de Frota":
+        st.session_state["menu_frota_aberto"] = not st.session_state["menu_frota_aberto"]
+    else:
+        set_menu("Gestão de Frota")
+
+def set_pagina_custos(pagina):
+    set_menu("Gestão de Custos")
+    st.session_state["pagina_custos"] = pagina
+    st.session_state["menu_custos_aberto"] = True
+
+def toggle_menu_custos():
+    if st.session_state.get("ultimo_menu") == "Gestão de Custos":
+        st.session_state["menu_custos_aberto"] = not st.session_state["menu_custos_aberto"]
+    else:
+        set_menu("Gestão de Custos")
+
+def set_pagina_contratos(pagina):
+    set_menu("Contratos e Locação")
+    st.session_state["pagina_contratos"] = pagina
+    st.session_state["menu_contratos_aberto"] = True
+
+def toggle_menu_contratos():
+    if st.session_state.get("ultimo_menu") == "Contratos e Locação":
+        st.session_state["menu_contratos_aberto"] = not st.session_state["menu_contratos_aberto"]
+    else:
+        set_menu("Contratos e Locação")
+
+def set_pagina_cobrancas(pagina):
+    set_menu("Gestão de Cobranças")
+    st.session_state["pagina_cobrancas"] = pagina
+    st.session_state["menu_cobrancas_aberto"] = True
+
+def toggle_menu_cobrancas():
+    if st.session_state.get("ultimo_menu") == "Gestão de Cobranças":
+        st.session_state["menu_cobrancas_aberto"] = not st.session_state["menu_cobrancas_aberto"]
+    else:
+        set_menu("Gestão de Cobranças")
+
+def set_pagina_pessoas(pagina):
+    set_menu("Pessoas e Acessos")
+    st.session_state["pagina_pessoas"] = (
+        "Motoristas" if pagina == "Usuários do Sistema" and st.session_state["perfil"] != "admin"
+        else pagina
+    )
+    st.session_state["menu_pessoas_aberto"] = True
+
+def toggle_menu_pessoas():
+    if st.session_state.get("ultimo_menu") == "Pessoas e Acessos":
+        st.session_state["menu_pessoas_aberto"] = not st.session_state["menu_pessoas_aberto"]
+    else:
+        set_menu("Pessoas e Acessos")
 
 def set_perfil():
     st.session_state["tela_config"] = False
@@ -4392,6 +4739,7 @@ else:
                 <img src="data:{logo_mime};base64,{encoded_string}" class="sidebar-logo-img">
                 <div class="sidebar-brand-text">
                     <h2>{html.escape(str(empresa_atual.nome_fantasia or "Kineo"))}</h2>
+                    <span class="sidebar-brand-subtitle">KINEO</span>
                 </div>
             </div>
             """, unsafe_allow_html=True)
@@ -4405,68 +4753,166 @@ else:
                 <div class="sidebar-logo-img">{letra}</div>
                 <div class="sidebar-brand-text">
                     <h2>{nome_emp_safe}</h2>
+                    <span class="sidebar-brand-subtitle">KINEO</span>
                 </div>
             </div>
             """, unsafe_allow_html=True)
 
+        pin_lbl = "Recolher menu" if st.session_state["sidebar_pinned"] else "Fixar menu"
+        pin_icn = ":material/keyboard_double_arrow_left:" if st.session_state["sidebar_pinned"] else ":material/keyboard_double_arrow_right:"
+        st.button(
+            pin_lbl,
+            icon=pin_icn,
+            on_click=toggle_pin,
+            key="nav_pin"
+        )
+
         # Itens Principais do Menu
+        def render_desktop_nav(label, icon, type, use_container_width, on_click, key, args=()):
+            """Visual próprio; o botão transparente mantém o callback e o teclado nativos."""
+            subitem = key.startswith(("nav_frota_", "nav_custos_", "nav_contratos_", "nav_cobrancas_", "nav_pessoas_"))
+            level = "sub" if subitem else "main"
+            classes = "kineo-nav-line"
+            if subitem:
+                classes += " kineo-nav-sub"
+            if type == "primary":
+                classes += " kineo-nav-active"
+            if key == "nav_main_privacidade":
+                classes += " kineo-nav-privacy"
+            symbol = html.escape(icon.removeprefix(":material/").removesuffix(":"))
+            chevron = ""
+            chevron_state = {
+                "nav_main_frota": "menu_frota_aberto",
+                "nav_main_custos": "menu_custos_aberto",
+                "nav_main_contratos": "menu_contratos_aberto",
+                "nav_main_cobrancas": "menu_cobrancas_aberto",
+                "nav_main_pessoas": "menu_pessoas_aberto",
+            }.get(key)
+            if chevron_state:
+                direction = "expand_less" if st.session_state[chevron_state] else "expand_more"
+                chevron = f'<span class="kineo-nav-chevron">{direction}</span>'
+            with st.container(key=f"kineo_nav_{level}_{key}", border=False):
+                st.markdown(
+                    f'<div class="{classes}" aria-hidden="true">'
+                    f'<span class="kineo-nav-icon">{symbol}</span>'
+                    f'<span class="kineo-nav-label">{html.escape(label)}</span>'
+                    f'{chevron}</div>',
+                    unsafe_allow_html=True,
+                )
+                st.button(
+                    label, icon=icon, type=type, use_container_width=use_container_width,
+                    on_click=on_click, args=args, key=key,
+                )
+
         MENU_ITEMS = [
-            ("Painel Gerencial", ":material/bar_chart:"),
-            ("Gestão de Frota", ":material/directions_car:"),
-            ("Gestão de Custos", ":material/account_balance_wallet:"),
-            ("Contratos e Locação", ":material/description:"),
-            ("Gestão de Cobranças", ":material/request_quote:")
+            ("Painel Gerencial", ":material/bar_chart:", "painel"),
+            ("Gestão de Frota", ":material/directions_car:", "frota"),
+            ("Gestão de Custos", ":material/account_balance_wallet:", "custos"),
+            ("Contratos e Locação", ":material/description:", "contratos"),
+            ("Gestão de Cobranças", ":material/request_quote:", "cobrancas")
         ]
         # Todos os perfis autenticados acessam Motoristas.
         # A gestão de Usuários do Sistema é liberada apenas para administradores.
-        MENU_ITEMS.append(("Pessoas e Acessos", ":material/group:"))
+        MENU_ITEMS.append(("Pessoas e Acessos", ":material/group:", "pessoas"))
 
-        for label, icon in MENU_ITEMS:
+        MENU_TOGGLES = {
+            "frota": toggle_menu_frota,
+            "custos": toggle_menu_custos,
+            "contratos": toggle_menu_contratos,
+            "cobrancas": toggle_menu_cobrancas,
+            "pessoas": toggle_menu_pessoas,
+        }
+        NOVOS_SUBMENUS = {
+            "custos": (set_pagina_custos, [
+                ("Visão de Custos", ":material/monitoring:"),
+                ("Registrar Despesa", ":material/add_card:"),
+                ("Lançamentos", ":material/receipt_long:"),
+            ]),
+            "contratos": (set_pagina_contratos, [
+                ("Visão de Contratos", ":material/dashboard:"),
+                ("Novo Contrato", ":material/note_add:"),
+                ("Gestão de Contratos", ":material/edit_document:"),
+                ("Substituições", ":material/swap_horiz:"),
+            ]),
+            "cobrancas": (set_pagina_cobrancas, [
+                ("Visão Financeira", ":material/account_balance:"),
+                ("Recorrências", ":material/repeat:"),
+                ("Operação Mensal", ":material/calendar_month:"),
+            ]),
+            "pessoas": (set_pagina_pessoas, [
+                ("Motoristas", ":material/badge:"),
+            ] + ([("Usuários do Sistema", ":material/manage_accounts:")]
+                 if st.session_state["perfil"] == "admin" else [])),
+        }
+
+        st.markdown('<div class="sidebar-nav-section">PAINEL</div>', unsafe_allow_html=True)
+        for label, icon, slug in MENU_ITEMS:
+            if label == "Gestão de Frota":
+                st.markdown('<div class="sidebar-nav-section">OPERAÇÃO</div>', unsafe_allow_html=True)
             is_active = (tela_ativa == label)
-            st.button(
+            render_desktop_nav(
                 label, 
                 icon=icon, 
                 type="primary" if is_active else "secondary", 
                 use_container_width=True, 
-                on_click=set_menu, 
-                args=(label,), 
-                key=f"nav_{label}"
+                on_click=MENU_TOGGLES.get(slug, set_menu),
+                args=() if slug in MENU_TOGGLES else (label,),
+                key=f"nav_main_{slug}"
             )
-
-        # Divisor Flexbox invisível que empurra o resto para baixo
-        st.markdown('<div class="sidebar-spacer"></div>', unsafe_allow_html=True)
-
-        # Ações Inferiores (Pin e Configurações rebaixados e colados no perfil)
-        pin_lbl = "Desafixar Menu" if st.session_state["sidebar_pinned"] else "Fixar Menu"
-        pin_icn = ":material/keep_off:" if st.session_state["sidebar_pinned"] else ":material/push_pin:"
-        
-        st.button(
-            pin_lbl, 
-            icon=pin_icn, 
-            use_container_width=True, 
-            on_click=toggle_pin, 
-            key="nav_pin"
-        )
+            if label == "Gestão de Frota" and tela_ativa == "Gestão de Frota" and st.session_state["menu_frota_aberto"]:
+                for pagina, icone in [
+                    ("Visão da Frota", ":material/dashboard:"),
+                    ("Veículos", ":material/directions_car:"),
+                    ("Status da Frota", ":material/sync_alt:"),
+                    ("Análise por Veículo", ":material/monitoring:"),
+                    ("Saúde da Frota", ":material/health_and_safety:"),
+                    ("Planos de Manutenção", ":material/build:"),
+                ]:
+                    render_desktop_nav(
+                        pagina,
+                        icon=icone,
+                        type="primary" if st.session_state["pagina_frota"] == pagina else "secondary",
+                        use_container_width=True,
+                        on_click=set_pagina_frota,
+                        args=(pagina,),
+                        key=f"nav_frota_{pagina}",
+                    )
+            if slug in NOVOS_SUBMENUS and tela_ativa == label and st.session_state[f"menu_{slug}_aberto"]:
+                callback_pagina, paginas_menu = NOVOS_SUBMENUS[slug]
+                for pagina, icone in paginas_menu:
+                    render_desktop_nav(
+                        pagina,
+                        icon=icone,
+                        type="primary" if st.session_state[f"pagina_{slug}"] == pagina else "secondary",
+                        use_container_width=True,
+                        on_click=callback_pagina,
+                        args=(pagina,),
+                        key=f"nav_{slug}_{pagina}",
+                    )
 
         if st.session_state["perfil"] == "admin":
+            st.markdown('<div class="sidebar-nav-section">ADMINISTRAÇÃO</div>', unsafe_allow_html=True)
             is_cfg = (tela_ativa == "Configurações")
-            st.button(
+            render_desktop_nav(
                 "Configurações", 
                 icon=":material/settings:", 
                 type="primary" if is_cfg else "secondary", 
                 use_container_width=True, 
                 on_click=set_config, 
-                key="nav_cfg"
+                key="nav_main_configuracoes"
             )
 
+        # Divisor Flexbox invisível que empurra o resto para baixo
+        st.markdown('<div class="sidebar-spacer"></div>', unsafe_allow_html=True)
+
         # Privacidade/Cookies: acesso discreto, disponível para todos os perfis
-        st.button(
+        render_desktop_nav(
             "Privacidade · Cookies",
             icon=":material/policy:",
             type="primary" if tela_ativa == "Política de Privacidade" else "secondary",
             use_container_width=True,
             on_click=set_privacidade,
-            key="nav_privacidade"
+            key="nav_main_privacidade"
         )
 
         # Espaço protetor estrito para acomodar exatamente a altura do perfil sem gerar scroll
@@ -4997,6 +5443,7 @@ else:
                             y="valor",
                             color="tipo",
                             barmode="group",
+                            text="valor",
                             color_discrete_map={
                                 "Faturamento": "#1768E5",
                                 "Despesas": "#8CA3C2",
@@ -5005,6 +5452,9 @@ else:
                         fig_fluxo.update_traces(
                             hovertemplate="<b>%{x}</b><br>R$ %{y:,.2f}<extra></extra>",
                             marker_line_width=0,
+                            texttemplate="R$ %{text:,.0f}",
+                            textposition="outside",
+                            cliponaxis=False,
                         )
                         fig_fluxo.update_layout(
                             **{
@@ -5012,6 +5462,7 @@ else:
                                 "margin": dict(l=10, r=10, t=35, b=10),
                             },
                             height=310,
+                            separators=",.",
                             bargap=0.28,
                             xaxis=dict(title="", type="category", showgrid=False),
                             yaxis=dict(
@@ -5126,18 +5577,23 @@ else:
                                 x="valor_total",
                                 y="veiculo",
                                 orientation="h",
+                                text="valor_total",
                                 color_discrete_sequence=["#3D78D8"],
                             )
                             fig_gastos.update_traces(
                                 hovertemplate="<b>%{y}</b><br>R$ %{x:,.2f}<extra></extra>",
                                 marker_line_width=0,
+                                texttemplate="R$ %{text:,.0f}",
+                                textposition="outside",
+                                cliponaxis=False,
                             )
                             fig_gastos.update_layout(
                                 **{
                                     **PLOTLY_LAYOUT,
-                                    "margin": dict(l=5, r=10, t=10, b=5),
+                                    "margin": dict(l=5, r=70, t=10, b=5),
                                 },
                                 height=250,
+                                separators=",.",
                                 xaxis=dict(
                                     title="",
                                     showgrid=True,
@@ -5250,17 +5706,10 @@ else:
             with c4:
                 frota_stat_card("Em manutenção", qtd_manutencao, "atenção operacional", "amber")
             
-            tab_visao, tab_admin, tab_status, tab_gastos, tab_planos, tab_saude = st.tabs([
-                "Visão geral",
-                "Adicionar veículo",
-                "Alterar status",
-                "Análise de gastos",
-                "Planos de manutenção",
-                "Saúde da frota",
-            ])
+            pagina_frota = st.session_state["pagina_frota"]
 
             # ── Aba: Visão geral operacional ─────────────────────────────────────
-            with tab_visao:
+            if pagina_frota == "Visão da Frota":
                 st.markdown(
                     """
                     <div class="kineo-frota-overview-head">
@@ -5378,7 +5827,7 @@ else:
                         )
 
             # ── Aba: Cadastro ─────────────────────────────────────────────────────
-            with tab_admin:
+            elif pagina_frota == "Veículos":
                 st.markdown(
                     """
                     <div class="kineo-frota-overview-head">
@@ -5778,7 +6227,7 @@ else:
                                     session.close()
 
             # ── Aba: Alterar Status ────────────────────────────────────────────────
-            with tab_status:
+            elif pagina_frota == "Status da Frota":
                 if total == 0:
                     st.info("Nenhum veículo cadastrado.", icon=None)
                 else:
@@ -5891,7 +6340,7 @@ else:
                                 session.close()
 
             # ── Aba: Gastos ───────────────────────────────────────────────────────
-            with tab_gastos:
+            elif pagina_frota == "Análise por Veículo":
                 if total == 0:
                     st.info("Nenhum veículo cadastrado.", icon=None) 
                 else:
@@ -5963,12 +6412,19 @@ else:
                                                 x="Mes_Ano", 
                                                 y="valor_total", 
                                                 color="categoria", 
+                                                text="valor_total",
                                                 color_discrete_sequence=[PALETTE["indigo"], PALETTE["amber"], PALETTE["slate"]]
+                                            )
+                                            fig_outros.update_traces(
+                                                texttemplate="R$ %{text:,.0f}",
+                                                textposition="outside",
+                                                cliponaxis=False,
                                             )
                                             fig_outros.update_layout(
                                                 **PLOTLY_LAYOUT, 
                                                 title_text="Manutenção e Outros", 
                                                 height=220, 
+                                                separators=",.",
                                                 xaxis=dict(title="", type="category"), 
                                                 yaxis=dict(visible=False)
                                             )
@@ -5979,7 +6435,7 @@ else:
                                     st.caption("Veículo sem histórico financeiro.")
 
             # ── Aba: Planos de manutenção ─────────────────────────────────────────
-            with tab_planos:
+            elif pagina_frota == "Planos de Manutenção":
                 st.markdown("### Planos de manutenção")
                 st.caption(
                     "Cadastre o plano uma vez por configuração de veículo e reutilize-o em todas as placas compatíveis. "
@@ -6249,7 +6705,7 @@ else:
                         )
 
             # ── Aba: Saúde ────────────────────────────────────────────────────────
-            with tab_saude:
+            elif pagina_frota == "Saúde da Frota":
                 if total == 0:
                     st.info("Nenhum veículo cadastrado.", icon=None)
                 else:
@@ -6429,13 +6885,9 @@ else:
                     for _, r in df_veiculos.iterrows()
                 }
 
-                tab_visao_custos, tab_lancar, tab_lancamentos = st.tabs([
-                    "Visão geral",
-                    "Registrar despesa",
-                    "Lançamentos financeiros"
-                ])
+                pagina_custos = st.session_state["pagina_custos"]
 
-                with tab_visao_custos:
+                if pagina_custos == "Visão de Custos":
                     visao_custo_col, ranking_custo_col = st.columns([1.7, 1])
                     with visao_custo_col:
                         with st.container(border=True):
@@ -6476,12 +6928,18 @@ else:
                                     ranking_custos,
                                     x="categoria",
                                     y="valor_total",
+                                    text="valor_total",
                                     labels={
                                         "categoria": "Categoria",
                                         "valor_total": "Valor (R$)",
                                     },
                                 )
-                                fig_ranking_custos.update_layout(**PLOTLY_LAYOUT)
+                                fig_ranking_custos.update_traces(
+                                    texttemplate="R$ %{text:,.0f}",
+                                    textposition="outside",
+                                    cliponaxis=False,
+                                )
+                                fig_ranking_custos.update_layout(**PLOTLY_LAYOUT, separators=",.")
                                 st.plotly_chart(
                                     fig_ranking_custos,
                                     use_container_width=True,
@@ -6495,7 +6953,7 @@ else:
                 # ──────────────────────────────────────────────────────────────
                 # REGISTRAR DESPESA
                 # ──────────────────────────────────────────────────────────────
-                with tab_lancar:
+                elif pagina_custos == "Registrar Despesa":
                     # Uma nova versão de chave recria os widgets limpos após salvar.
                     custos_form_version = st.session_state.setdefault("custos_form_version", 0)
                     with st.container(border=True):
@@ -6968,7 +7426,7 @@ else:
                 # ──────────────────────────────────────────────────────────────
                 # LANÇAMENTOS FINANCEIROS
                 # ──────────────────────────────────────────────────────────────
-                with tab_lancamentos:
+                elif pagina_custos == "Lançamentos":
                     df_custos = carregar_dados_tabela(f"""
                         SELECT
                             c.id,
@@ -7614,16 +8072,12 @@ else:
             with cb4:
                 module_stat_card("Vencidas", vencidas_resumo, "exigem acompanhamento")
 
-            tab_financeiro, tab_recorrentes, tab_mensal = st.tabs([
-                "Visão financeira",
-                "Regras recorrentes",
-                "Operação mensal",
-            ])
+            pagina_cobrancas = st.session_state["pagina_cobrancas"]
 
             # ──────────────────────────────────────────────────────────────────────
             # VISÃO FINANCEIRA — RECEITA - CUSTOS = RESULTADO
             # ──────────────────────────────────────────────────────────────────────
-            with tab_financeiro:
+            if pagina_cobrancas == "Visão Financeira":
                 st.markdown("### Resultado financeiro")
                 st.caption(
                     "Compare a receita prevista/recebida com os custos registrados na Gestão de Custos. "
@@ -8250,7 +8704,7 @@ else:
             # ──────────────────────────────────────────────────────────────────────
             # COBRANÇAS RECORRENTES
             # ──────────────────────────────────────────────────────────────────────
-            with tab_recorrentes:
+            elif pagina_cobrancas == "Recorrências":
                 st.markdown("### Motor de cobranças recorrentes")
                 st.caption(
                     "Cadastre uma única vez a regra de faturamento. O Kineo replica "
@@ -8840,7 +9294,7 @@ else:
             # ──────────────────────────────────────────────────────────────────────
             # CONTROLE MENSAL
             # ──────────────────────────────────────────────────────────────────────
-            with tab_mensal:
+            elif pagina_cobrancas == "Operação Mensal":
                 st.markdown("### Controle mensal")
                 competencias = opcoes_competencias(12, 18)
                 comp_atual = hoje_local().strftime("%m/%Y")
@@ -9683,15 +10137,10 @@ else:
             with ct4:
                 module_stat_card("Encerrados", contratos_encerrados_qtd, "histórico preservado")
 
-            tab_visao, tab_novo, tab_editar, tab_substituicao = st.tabs([
-                "Visão comercial",
-                "Abrir contrato",
-                "Finalizar ou editar",
-                "Substituição temporária"
-            ])
+            pagina_contratos = st.session_state["pagina_contratos"]
 
             # ── Aba 1: Visão Geral ────────────────────────────────────────────────
-            with tab_visao:
+            if pagina_contratos == "Visão de Contratos":
                 if not df_contratos.empty:
                     df_exib = df_contratos.rename(columns={
                         "cliente": "Cliente",
@@ -9770,7 +10219,7 @@ else:
                     st.info("Plataforma sem contratos firmados.", icon=None)
 
             # ── Aba 2: Novo Contrato ──────────────────────────────────────────────
-            with tab_novo:
+            elif pagina_contratos == "Novo Contrato":
                 contrato_form_version = st.session_state["contrato_form_version"]
                 disponiveis_novo = df_veiculos[df_veiculos["status"] == "Disponível"].copy()
                 if disponiveis_novo.empty:
@@ -9876,7 +10325,7 @@ else:
                                     session.close()
 
             # ── Aba 3: Editar / Encerrar Contrato ─────────────────────────────────
-            with tab_editar:
+            elif pagina_contratos == "Gestão de Contratos":
                 if df_contratos.empty:
                     st.info("O módulo não localizou contratos para manutenção.", icon=None)
                 else:
@@ -10118,7 +10567,7 @@ else:
                                     session.close()
 
             # ── Aba 4: Substituição / Manutenção ──────────────────────────────────
-            with tab_substituicao:
+            elif pagina_contratos == "Substituições":
                 contratos_ativos = df_contratos[df_contratos["ativo"] == 1].copy()
                 if contratos_ativos.empty:
                     st.info("Não há contratos vigentes para substituição.", icon=None)
@@ -10290,15 +10739,12 @@ else:
                     module_stat_card("Inativos", motoristas_inativos, "histórico preservado")
 
             if is_admin:
-                tab_motoristas, tab_usuarios = st.tabs([
-                    "Motoristas",
-                    "Usuários do Sistema",
-                ])
+                pagina_pessoas = st.session_state["pagina_pessoas"]
 
-                with tab_motoristas:
+                if pagina_pessoas == "Motoristas":
                     render_gestao_motoristas(emp_id)
 
-                with tab_usuarios:
+                elif pagina_pessoas == "Usuários do Sistema":
                     render_gestao_usuarios(emp_id)
             else:
                 # Operadores podem manter o cadastro operacional de motoristas,
