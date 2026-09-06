@@ -1051,6 +1051,12 @@ body:has([data-testid="stSidebar"]:hover) [data-testid="stMain"] {{
         font-size: 20px;
         line-height: 1;
         font-feature-settings: "liga";
+        transform: rotate(0deg);
+        transition: transform 190ms cubic-bezier(0.2, 0.8, 0.2, 1);
+        transform-origin: center;
+    }}
+    [data-testid="stSidebar"] .kineo-nav-accordion-open .kineo-nav-chevron {{
+        transform: rotate(180deg);
     }}
     [data-testid="stSidebar"] .kineo-nav-active {{
         background: #1E293B;
@@ -1582,6 +1588,125 @@ label {{
         opacity: 0 !important;
         pointer-events: auto !important;
         z-index: 20 !important;
+    }}
+}}
+
+/* Microinteração dos accordions desktop no bloco único de cada submenu. */
+@media (min-width: 769px) {{
+    [data-testid="stSidebar"] [class*="st-key-kineo_module_"],
+    [data-testid="stSidebar"] [class*="st-key-kineo_submenu_"] {{
+        width: 100% !important;
+        min-width: 0 !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        border: 0 !important;
+        border-radius: 0 !important;
+        box-shadow: none !important;
+        background: transparent !important;
+    }}
+    [data-testid="stSidebar"] [class*="st-key-kineo_submenu_"] {{
+        display: {"block" if pinned else "none"} !important;
+    }}
+    [data-testid="stSidebar"]:hover [class*="st-key-kineo_submenu_"] {{
+        display: block !important;
+    }}
+    [data-testid="stSidebar"] [class*="st-key-kineo_module_"][data-testid="stVerticalBlockBorderWrapper"],
+    [data-testid="stSidebar"] [class*="st-key-kineo_module_"] [data-testid="stVerticalBlockBorderWrapper"],
+    [data-testid="stSidebar"] [class*="st-key-kineo_submenu_"][data-testid="stVerticalBlockBorderWrapper"],
+    [data-testid="stSidebar"] [class*="st-key-kineo_submenu_"] [data-testid="stVerticalBlockBorderWrapper"] {{
+        background: transparent !important;
+        border: 0 !important;
+        border-radius: 0 !important;
+        box-shadow: none !important;
+        padding: 0 !important;
+    }}
+    [data-testid="stSidebar"] [class*="st-key-kineo_module_"] [data-testid="stVerticalBlock"] {{
+        gap: 0 !important;
+    }}
+    [data-testid="stSidebar"] [class*="st-key-kineo_submenu_"] > [data-testid="stVerticalBlock"],
+    [data-testid="stSidebar"] [class*="st-key-kineo_submenu_"] > div > [data-testid="stVerticalBlock"] {{
+        gap: 4px !important;
+    }}
+    [data-testid="stSidebar"] [class*="st-key-kineo_submenu_frota"] {{
+        --kineo-submenu-height: 236px;
+    }}
+    [data-testid="stSidebar"] [class*="st-key-kineo_submenu_custos"] {{
+        --kineo-submenu-height: 116px;
+    }}
+    [data-testid="stSidebar"] [class*="st-key-kineo_submenu_contratos"] {{
+        --kineo-submenu-height: 156px;
+    }}
+    [data-testid="stSidebar"] [class*="st-key-kineo_submenu_cobrancas"] {{
+        --kineo-submenu-height: 116px;
+    }}
+    [data-testid="stSidebar"] [class*="st-key-kineo_submenu_pessoas"] {{
+        --kineo-submenu-height: {"76px" if st.session_state.get("perfil") == "admin" else "36px"};
+    }}
+    [data-testid="stSidebar"] .kineo-submenu-state {{
+        display: none !important;
+    }}
+    [data-testid="stSidebar"] [class*="st-key-kineo_submenu_"] [data-testid="stElementContainer"]:has(.kineo-submenu-state),
+    [data-testid="stSidebar"] [class*="st-key-kineo_submenu_"] .element-container:has(.kineo-submenu-state) {{
+        display: none !important;
+        height: 0 !important;
+        min-height: 0 !important;
+        max-height: 0 !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        overflow: hidden !important;
+    }}
+    [data-testid="stSidebar"] [class*="st-key-kineo_submenu_"] [class*="st-key-kineo_nav_sub_"] {{
+        height: 36px !important;
+        min-height: 36px !important;
+        max-height: 36px !important;
+        flex: 0 0 36px !important;
+    }}
+    [data-testid="stSidebar"] [class*="st-key-kineo_submenu_"]:has(.kineo-submenu-open) {{
+        height: auto !important;
+        min-height: 0 !important;
+        max-height: var(--kineo-submenu-height) !important;
+        opacity: 1 !important;
+        transform: translateY(0);
+        overflow: hidden !important;
+        visibility: visible !important;
+        pointer-events: auto !important;
+        transition:
+            max-height 190ms cubic-bezier(0.2, 0.8, 0.2, 1),
+            opacity 190ms cubic-bezier(0.2, 0.8, 0.2, 1),
+            transform 190ms cubic-bezier(0.2, 0.8, 0.2, 1),
+            visibility 0s linear 0s !important;
+    }}
+    [data-testid="stSidebar"] [class*="st-key-kineo_submenu_"]:has(.kineo-submenu-closed) {{
+        height: 0 !important;
+        min-height: 0 !important;
+        max-height: 0 !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        opacity: 0 !important;
+        transform: translateY(-3px);
+        overflow: hidden !important;
+        visibility: hidden !important;
+        pointer-events: none !important;
+        transition:
+            max-height 165ms cubic-bezier(0.2, 0.8, 0.2, 1),
+            opacity 165ms cubic-bezier(0.2, 0.8, 0.2, 1),
+            transform 165ms cubic-bezier(0.2, 0.8, 0.2, 1),
+            visibility 0s linear 165ms !important;
+    }}
+    [data-testid="stSidebar"] [class*="st-key-kineo_submenu_"]:has(.kineo-submenu-closed),
+    [data-testid="stSidebar"] [class*="st-key-kineo_submenu_"]:has(.kineo-submenu-closed) * {{
+        pointer-events: none !important;
+    }}
+    [data-testid="stSidebar"] [class*="st-key-kineo_submenu_"]:has(.kineo-submenu-closed) button {{
+        visibility: hidden !important;
+        pointer-events: none !important;
+    }}
+}}
+
+@media (min-width: 769px) and (prefers-reduced-motion: reduce) {{
+    [data-testid="stSidebar"] [class*="st-key-kineo_submenu_"],
+    [data-testid="stSidebar"] .kineo-nav-chevron {{
+        transition: none !important;
     }}
 }}
 </style>
@@ -3447,10 +3572,12 @@ def set_pagina_frota(pagina):
     st.session_state["menu_frota_aberto"] = True
 
 def toggle_menu_frota():
-    if st.session_state.get("ultimo_menu") == "Gestão de Frota":
-        st.session_state["menu_frota_aberto"] = not st.session_state["menu_frota_aberto"]
-    else:
-        set_menu("Gestão de Frota")
+    novo_estado = not st.session_state["menu_frota_aberto"]
+    st.session_state["menu_frota_aberto"] = novo_estado
+    st.session_state["menu_custos_aberto"] = False
+    st.session_state["menu_contratos_aberto"] = False
+    st.session_state["menu_cobrancas_aberto"] = False
+    st.session_state["menu_pessoas_aberto"] = False
 
 def set_pagina_custos(pagina):
     set_menu("Gestão de Custos")
@@ -3458,10 +3585,12 @@ def set_pagina_custos(pagina):
     st.session_state["menu_custos_aberto"] = True
 
 def toggle_menu_custos():
-    if st.session_state.get("ultimo_menu") == "Gestão de Custos":
-        st.session_state["menu_custos_aberto"] = not st.session_state["menu_custos_aberto"]
-    else:
-        set_menu("Gestão de Custos")
+    novo_estado = not st.session_state["menu_custos_aberto"]
+    st.session_state["menu_frota_aberto"] = False
+    st.session_state["menu_custos_aberto"] = novo_estado
+    st.session_state["menu_contratos_aberto"] = False
+    st.session_state["menu_cobrancas_aberto"] = False
+    st.session_state["menu_pessoas_aberto"] = False
 
 def set_pagina_contratos(pagina):
     set_menu("Contratos e Locação")
@@ -3469,10 +3598,12 @@ def set_pagina_contratos(pagina):
     st.session_state["menu_contratos_aberto"] = True
 
 def toggle_menu_contratos():
-    if st.session_state.get("ultimo_menu") == "Contratos e Locação":
-        st.session_state["menu_contratos_aberto"] = not st.session_state["menu_contratos_aberto"]
-    else:
-        set_menu("Contratos e Locação")
+    novo_estado = not st.session_state["menu_contratos_aberto"]
+    st.session_state["menu_frota_aberto"] = False
+    st.session_state["menu_custos_aberto"] = False
+    st.session_state["menu_contratos_aberto"] = novo_estado
+    st.session_state["menu_cobrancas_aberto"] = False
+    st.session_state["menu_pessoas_aberto"] = False
 
 def set_pagina_cobrancas(pagina):
     set_menu("Gestão de Cobranças")
@@ -3480,10 +3611,12 @@ def set_pagina_cobrancas(pagina):
     st.session_state["menu_cobrancas_aberto"] = True
 
 def toggle_menu_cobrancas():
-    if st.session_state.get("ultimo_menu") == "Gestão de Cobranças":
-        st.session_state["menu_cobrancas_aberto"] = not st.session_state["menu_cobrancas_aberto"]
-    else:
-        set_menu("Gestão de Cobranças")
+    novo_estado = not st.session_state["menu_cobrancas_aberto"]
+    st.session_state["menu_frota_aberto"] = False
+    st.session_state["menu_custos_aberto"] = False
+    st.session_state["menu_contratos_aberto"] = False
+    st.session_state["menu_cobrancas_aberto"] = novo_estado
+    st.session_state["menu_pessoas_aberto"] = False
 
 def set_pagina_pessoas(pagina):
     set_menu("Pessoas e Acessos")
@@ -3494,10 +3627,12 @@ def set_pagina_pessoas(pagina):
     st.session_state["menu_pessoas_aberto"] = True
 
 def toggle_menu_pessoas():
-    if st.session_state.get("ultimo_menu") == "Pessoas e Acessos":
-        st.session_state["menu_pessoas_aberto"] = not st.session_state["menu_pessoas_aberto"]
-    else:
-        set_menu("Pessoas e Acessos")
+    novo_estado = not st.session_state["menu_pessoas_aberto"]
+    st.session_state["menu_frota_aberto"] = False
+    st.session_state["menu_custos_aberto"] = False
+    st.session_state["menu_contratos_aberto"] = False
+    st.session_state["menu_cobrancas_aberto"] = False
+    st.session_state["menu_pessoas_aberto"] = novo_estado
 
 def set_perfil():
     st.session_state["tela_config"] = False
@@ -4789,8 +4924,9 @@ else:
                 "nav_main_pessoas": "menu_pessoas_aberto",
             }.get(key)
             if chevron_state:
-                direction = "expand_less" if st.session_state[chevron_state] else "expand_more"
-                chevron = f'<span class="kineo-nav-chevron">{direction}</span>'
+                if st.session_state[chevron_state]:
+                    classes += " kineo-nav-accordion-open"
+                chevron = '<span class="kineo-nav-chevron">expand_more</span>'
             with st.container(key=f"kineo_nav_{level}_{key}", border=False):
                 st.markdown(
                     f'<div class="{classes}" aria-hidden="true">'
@@ -4850,45 +4986,63 @@ else:
             if label == "Gestão de Frota":
                 st.markdown('<div class="sidebar-nav-section">OPERAÇÃO</div>', unsafe_allow_html=True)
             is_active = (tela_ativa == label)
-            render_desktop_nav(
-                label, 
-                icon=icon, 
-                type="primary" if is_active else "secondary", 
-                use_container_width=True, 
-                on_click=MENU_TOGGLES.get(slug, set_menu),
-                args=() if slug in MENU_TOGGLES else (label,),
-                key=f"nav_main_{slug}"
-            )
-            if label == "Gestão de Frota" and tela_ativa == "Gestão de Frota" and st.session_state["menu_frota_aberto"]:
-                for pagina, icone in [
-                    ("Visão da Frota", ":material/dashboard:"),
-                    ("Veículos", ":material/directions_car:"),
-                    ("Status da Frota", ":material/sync_alt:"),
-                    ("Análise por Veículo", ":material/monitoring:"),
-                    ("Saúde da Frota", ":material/health_and_safety:"),
-                    ("Planos de Manutenção", ":material/build:"),
-                ]:
+            if slug in MENU_TOGGLES:
+                with st.container(key=f"kineo_module_{slug}", border=False):
                     render_desktop_nav(
-                        pagina,
-                        icon=icone,
-                        type="primary" if st.session_state["pagina_frota"] == pagina else "secondary",
+                        label,
+                        icon=icon,
+                        type="primary" if is_active else "secondary",
                         use_container_width=True,
-                        on_click=set_pagina_frota,
-                        args=(pagina,),
-                        key=f"nav_frota_{pagina}",
+                        on_click=MENU_TOGGLES[slug],
+                        key=f"nav_main_{slug}"
                     )
-            if slug in NOVOS_SUBMENUS and tela_ativa == label and st.session_state[f"menu_{slug}_aberto"]:
-                callback_pagina, paginas_menu = NOVOS_SUBMENUS[slug]
-                for pagina, icone in paginas_menu:
-                    render_desktop_nav(
-                        pagina,
-                        icon=icone,
-                        type="primary" if st.session_state[f"pagina_{slug}"] == pagina else "secondary",
-                        use_container_width=True,
-                        on_click=callback_pagina,
-                        args=(pagina,),
-                        key=f"nav_{slug}_{pagina}",
-                    )
+                    submenu_aberto = st.session_state[f"menu_{slug}_aberto"]
+                    with st.container(key=f"kineo_submenu_{slug}", border=False):
+                        estado_submenu = "kineo-submenu-open" if submenu_aberto else "kineo-submenu-closed"
+                        st.markdown(
+                            f'<div class="kineo-submenu-state {estado_submenu}" aria-hidden="true"></div>',
+                            unsafe_allow_html=True,
+                        )
+                        if label == "Gestão de Frota":
+                            for pagina, icone in [
+                                ("Visão da Frota", ":material/dashboard:"),
+                                ("Veículos", ":material/directions_car:"),
+                                ("Status da Frota", ":material/sync_alt:"),
+                                ("Análise por Veículo", ":material/monitoring:"),
+                                ("Saúde da Frota", ":material/health_and_safety:"),
+                                ("Planos de Manutenção", ":material/build:"),
+                            ]:
+                                render_desktop_nav(
+                                    pagina,
+                                    icon=icone,
+                                    type="primary" if st.session_state["pagina_frota"] == pagina else "secondary",
+                                    use_container_width=True,
+                                    on_click=set_pagina_frota,
+                                    args=(pagina,),
+                                    key=f"nav_frota_{pagina}",
+                                )
+                        else:
+                            callback_pagina, paginas_menu = NOVOS_SUBMENUS[slug]
+                            for pagina, icone in paginas_menu:
+                                render_desktop_nav(
+                                    pagina,
+                                    icon=icone,
+                                    type="primary" if st.session_state[f"pagina_{slug}"] == pagina else "secondary",
+                                    use_container_width=True,
+                                    on_click=callback_pagina,
+                                    args=(pagina,),
+                                    key=f"nav_{slug}_{pagina}",
+                                )
+            else:
+                render_desktop_nav(
+                    label,
+                    icon=icon,
+                    type="primary" if is_active else "secondary",
+                    use_container_width=True,
+                    on_click=set_menu,
+                    args=(label,),
+                    key=f"nav_main_{slug}"
+                )
 
         if st.session_state["perfil"] == "admin":
             st.markdown('<div class="sidebar-nav-section">ADMINISTRAÇÃO</div>', unsafe_allow_html=True)
