@@ -673,14 +673,16 @@ for key, default in [
     ("login_remember_loaded", False),
     ("pagina_frota", "Visão da Frota"),
     ("menu_frota_aberto", False),
-    ("pagina_custos", "Visão de Custos"),
+    ("pagina_custos", "Registrar Despesa"),
     ("menu_custos_aberto", False),
-    ("pagina_contratos", "Visão de Contratos"),
+    ("pagina_contratos", "Gestão de Contratos"),
     ("menu_contratos_aberto", False),
-    ("pagina_cobrancas", "Visão Financeira"),
+    ("pagina_cobrancas", "Operação Mensal"),
     ("menu_cobrancas_aberto", False),
     ("pagina_pessoas", "Motoristas"),
     ("menu_pessoas_aberto", False),
+    ("pagina_relatorios", "Custos e Despesas"),
+    ("menu_relatorios_aberto", False),
     ("login_remember_pending", None),
     ("uploader_key", 0), # Chave para resetar o uploader de planilhas
     ("custos_uploader_version", 0), # Chave para limpar o comprovante após registrar despesa
@@ -1052,7 +1054,7 @@ body:has([data-testid="stSidebar"]:hover) [data-testid="stMain"] {{
         line-height: 1;
         font-feature-settings: "liga";
         transform: rotate(0deg);
-        transition: transform 190ms cubic-bezier(0.2, 0.8, 0.2, 1);
+        transition: transform 140ms cubic-bezier(0.2, 0.8, 0.2, 1);
         transform-origin: center;
     }}
     [data-testid="stSidebar"] .kineo-nav-accordion-open .kineo-nav-chevron {{
@@ -1634,13 +1636,16 @@ label {{
         --kineo-submenu-height: 116px;
     }}
     [data-testid="stSidebar"] [class*="st-key-kineo_submenu_contratos"] {{
-        --kineo-submenu-height: 156px;
+        --kineo-submenu-height: 116px;
     }}
     [data-testid="stSidebar"] [class*="st-key-kineo_submenu_cobrancas"] {{
-        --kineo-submenu-height: 116px;
+        --kineo-submenu-height: 76px;
     }}
     [data-testid="stSidebar"] [class*="st-key-kineo_submenu_pessoas"] {{
         --kineo-submenu-height: {"76px" if st.session_state.get("perfil") == "admin" else "36px"};
+    }}
+    [data-testid="stSidebar"] [class*="st-key-kineo_submenu_relatorios"] {{
+        --kineo-submenu-height: 156px;
     }}
     [data-testid="stSidebar"] .kineo-submenu-state {{
         display: none !important;
@@ -1671,9 +1676,9 @@ label {{
         visibility: visible !important;
         pointer-events: auto !important;
         transition:
-            max-height 190ms cubic-bezier(0.2, 0.8, 0.2, 1),
-            opacity 190ms cubic-bezier(0.2, 0.8, 0.2, 1),
-            transform 190ms cubic-bezier(0.2, 0.8, 0.2, 1),
+            max-height 140ms cubic-bezier(0.2, 0.8, 0.2, 1),
+            opacity 140ms cubic-bezier(0.2, 0.8, 0.2, 1),
+            transform 140ms cubic-bezier(0.2, 0.8, 0.2, 1),
             visibility 0s linear 0s !important;
     }}
     [data-testid="stSidebar"] [class*="st-key-kineo_submenu_"]:has(.kineo-submenu-closed) {{
@@ -1688,10 +1693,10 @@ label {{
         visibility: hidden !important;
         pointer-events: none !important;
         transition:
-            max-height 165ms cubic-bezier(0.2, 0.8, 0.2, 1),
-            opacity 165ms cubic-bezier(0.2, 0.8, 0.2, 1),
-            transform 165ms cubic-bezier(0.2, 0.8, 0.2, 1),
-            visibility 0s linear 165ms !important;
+            max-height 120ms cubic-bezier(0.2, 0.8, 0.2, 1),
+            opacity 120ms cubic-bezier(0.2, 0.8, 0.2, 1),
+            transform 120ms cubic-bezier(0.2, 0.8, 0.2, 1),
+            visibility 0s linear 120ms !important;
     }}
     [data-testid="stSidebar"] [class*="st-key-kineo_submenu_"]:has(.kineo-submenu-closed),
     [data-testid="stSidebar"] [class*="st-key-kineo_submenu_"]:has(.kineo-submenu-closed) * {{
@@ -1727,6 +1732,46 @@ def carregar_dados_tabela(query, empresa_id, params=None):
 @st.cache_data
 def convert_df_to_csv(df):
     return df.to_csv(index=False, sep=';', decimal=',').encode('utf-8-sig')
+
+@st.cache_data
+def convert_df_to_excel(df, sheet_name="Dados"):
+    buffer = BytesIO()
+
+    with pd.ExcelWriter(buffer, engine="openpyxl") as writer:
+        df.to_excel(
+            writer,
+            index=False,
+            sheet_name=sheet_name
+        )
+
+    buffer.seek(0)
+    return buffer.getvalue()
+
+def render_exportacao_relatorio(df, nome_base, sheet_name, key_prefix):
+    if df is None or df.empty:
+        return
+
+    csv_data = convert_df_to_csv(df)
+    excel_data = convert_df_to_excel(df, sheet_name)
+    exp_csv, exp_xlsx, _ = st.columns([1, 1, 4])
+    with exp_csv:
+        st.download_button(
+            "Baixar CSV",
+            csv_data,
+            f"{nome_base}.csv",
+            "text/csv",
+            key=f"{key_prefix}_csv",
+            use_container_width=True,
+        )
+    with exp_xlsx:
+        st.download_button(
+            "Baixar Excel",
+            excel_data,
+            f"{nome_base}.xlsx",
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            key=f"{key_prefix}_xlsx",
+            use_container_width=True,
+        )
 
 def get_valid_date(year, month, day):
     max_day = calendar.monthrange(year, month)[1]
@@ -3551,10 +3596,11 @@ def set_menu(menu_name):
     else:
         st.session_state["menu_frota_aberto"] = False
     for modulo, slug, padrao in [
-        ("Gestão de Custos", "custos", "Visão de Custos"),
-        ("Contratos e Locação", "contratos", "Visão de Contratos"),
-        ("Gestão de Cobranças", "cobrancas", "Visão Financeira"),
+        ("Gestão de Custos", "custos", "Registrar Despesa"),
+        ("Contratos e Locação", "contratos", "Gestão de Contratos"),
+        ("Gestão de Cobranças", "cobrancas", "Operação Mensal"),
         ("Pessoas e Acessos", "pessoas", "Motoristas"),
+        ("Relatórios", "relatorios", "Custos e Despesas"),
     ]:
         st.session_state[f"menu_{slug}_aberto"] = menu_name == modulo
         if menu_name == modulo:
@@ -3578,6 +3624,7 @@ def toggle_menu_frota():
     st.session_state["menu_contratos_aberto"] = False
     st.session_state["menu_cobrancas_aberto"] = False
     st.session_state["menu_pessoas_aberto"] = False
+    st.session_state["menu_relatorios_aberto"] = False
 
 def set_pagina_custos(pagina):
     set_menu("Gestão de Custos")
@@ -3591,6 +3638,7 @@ def toggle_menu_custos():
     st.session_state["menu_contratos_aberto"] = False
     st.session_state["menu_cobrancas_aberto"] = False
     st.session_state["menu_pessoas_aberto"] = False
+    st.session_state["menu_relatorios_aberto"] = False
 
 def set_pagina_contratos(pagina):
     set_menu("Contratos e Locação")
@@ -3604,6 +3652,7 @@ def toggle_menu_contratos():
     st.session_state["menu_contratos_aberto"] = novo_estado
     st.session_state["menu_cobrancas_aberto"] = False
     st.session_state["menu_pessoas_aberto"] = False
+    st.session_state["menu_relatorios_aberto"] = False
 
 def set_pagina_cobrancas(pagina):
     set_menu("Gestão de Cobranças")
@@ -3617,6 +3666,7 @@ def toggle_menu_cobrancas():
     st.session_state["menu_contratos_aberto"] = False
     st.session_state["menu_cobrancas_aberto"] = novo_estado
     st.session_state["menu_pessoas_aberto"] = False
+    st.session_state["menu_relatorios_aberto"] = False
 
 def set_pagina_pessoas(pagina):
     set_menu("Pessoas e Acessos")
@@ -3633,6 +3683,21 @@ def toggle_menu_pessoas():
     st.session_state["menu_contratos_aberto"] = False
     st.session_state["menu_cobrancas_aberto"] = False
     st.session_state["menu_pessoas_aberto"] = novo_estado
+    st.session_state["menu_relatorios_aberto"] = False
+
+def set_pagina_relatorios(pagina):
+    set_menu("Relatórios")
+    st.session_state["pagina_relatorios"] = pagina
+    st.session_state["menu_relatorios_aberto"] = True
+
+def toggle_menu_relatorios():
+    novo_estado = not st.session_state["menu_relatorios_aberto"]
+    st.session_state["menu_frota_aberto"] = False
+    st.session_state["menu_custos_aberto"] = False
+    st.session_state["menu_contratos_aberto"] = False
+    st.session_state["menu_cobrancas_aberto"] = False
+    st.session_state["menu_pessoas_aberto"] = False
+    st.session_state["menu_relatorios_aberto"] = novo_estado
 
 def set_perfil():
     st.session_state["tela_config"] = False
@@ -4905,7 +4970,7 @@ else:
         # Itens Principais do Menu
         def render_desktop_nav(label, icon, type, use_container_width, on_click, key, args=()):
             """Visual próprio; o botão transparente mantém o callback e o teclado nativos."""
-            subitem = key.startswith(("nav_frota_", "nav_custos_", "nav_contratos_", "nav_cobrancas_", "nav_pessoas_"))
+            subitem = key.startswith(("nav_frota_", "nav_custos_", "nav_contratos_", "nav_cobrancas_", "nav_pessoas_", "nav_relatorios_"))
             level = "sub" if subitem else "main"
             classes = "kineo-nav-line"
             if subitem:
@@ -4922,6 +4987,7 @@ else:
                 "nav_main_contratos": "menu_contratos_aberto",
                 "nav_main_cobrancas": "menu_cobrancas_aberto",
                 "nav_main_pessoas": "menu_pessoas_aberto",
+                "nav_main_relatorios": "menu_relatorios_aberto",
             }.get(key)
             if chevron_state:
                 if st.session_state[chevron_state]:
@@ -4950,6 +5016,7 @@ else:
         # Todos os perfis autenticados acessam Motoristas.
         # A gestão de Usuários do Sistema é liberada apenas para administradores.
         MENU_ITEMS.append(("Pessoas e Acessos", ":material/group:", "pessoas"))
+        MENU_ITEMS.append(("Relatórios", ":material/analytics:", "relatorios"))
 
         MENU_TOGGLES = {
             "frota": toggle_menu_frota,
@@ -4957,21 +5024,19 @@ else:
             "contratos": toggle_menu_contratos,
             "cobrancas": toggle_menu_cobrancas,
             "pessoas": toggle_menu_pessoas,
+            "relatorios": toggle_menu_relatorios,
         }
         NOVOS_SUBMENUS = {
             "custos": (set_pagina_custos, [
-                ("Visão de Custos", ":material/monitoring:"),
                 ("Registrar Despesa", ":material/add_card:"),
                 ("Lançamentos", ":material/receipt_long:"),
             ]),
             "contratos": (set_pagina_contratos, [
-                ("Visão de Contratos", ":material/dashboard:"),
                 ("Novo Contrato", ":material/note_add:"),
                 ("Gestão de Contratos", ":material/edit_document:"),
                 ("Substituições", ":material/swap_horiz:"),
             ]),
             "cobrancas": (set_pagina_cobrancas, [
-                ("Visão Financeira", ":material/account_balance:"),
                 ("Recorrências", ":material/repeat:"),
                 ("Operação Mensal", ":material/calendar_month:"),
             ]),
@@ -4979,6 +5044,12 @@ else:
                 ("Motoristas", ":material/badge:"),
             ] + ([("Usuários do Sistema", ":material/manage_accounts:")]
                  if st.session_state["perfil"] == "admin" else [])),
+            "relatorios": (set_pagina_relatorios, [
+                ("Custos e Despesas", ":material/account_balance_wallet:"),
+                ("Análise por Veículo", ":material/monitoring:"),
+                ("Contratos", ":material/description:"),
+                ("Financeiro", ":material/account_balance:"),
+            ]),
         }
 
         st.markdown('<div class="sidebar-nav-section">PAINEL</div>', unsafe_allow_html=True)
@@ -5008,7 +5079,6 @@ else:
                                 ("Visão da Frota", ":material/dashboard:"),
                                 ("Veículos", ":material/directions_car:"),
                                 ("Status da Frota", ":material/sync_alt:"),
-                                ("Análise por Veículo", ":material/monitoring:"),
                                 ("Saúde da Frota", ":material/health_and_safety:"),
                                 ("Planos de Manutenção", ":material/build:"),
                             ]:
@@ -5805,7 +5875,10 @@ else:
                         key="dash_v11_acao_cobrancas",
                     )
 
-        elif tela_ativa == "Gestão de Frota":
+        elif tela_ativa == "Gestão de Frota" or (
+            tela_ativa == "Relatórios"
+            and st.session_state["pagina_relatorios"] == "Análise por Veículo"
+        ):
             aplicar_css_gestao_frota_v11()
             st.markdown('<div class="kineo-frota-v11"></div>', unsafe_allow_html=True)
 
@@ -5814,53 +5887,58 @@ else:
             )
             total = len(df_veiculos)
 
-            qtd_disponiveis = (
-                len(df_veiculos[df_veiculos["status"] == "Disponível"])
-                if total else 0
-            )
-            qtd_alugados = (
-                len(df_veiculos[df_veiculos["status"] == "Alugado"])
-                if total else 0
-            )
-            qtd_manutencao = (
-                len(df_veiculos[df_veiculos["status"] == "Manutenção"])
-                if total else 0
-            )
-            ocupacao_frota = (qtd_alugados / total * 100) if total else 0.0
-
-            st.markdown(
-                f"""
-                <div class="kineo-frota-hero">
-                    <div>
-                        <div class="kineo-frota-eyebrow">Operação da frota</div>
-                        <h1>Gestão de Frota</h1>
-                        <p>Cadastre veículos, acompanhe disponibilidade, custos e manutenção preventiva em um único ambiente.</p>
-                    </div>
-                    <div class="kineo-frota-total">
-                        <span>Veículos ativos</span>
-                        <strong>{total}</strong>
-                    </div>
-                </div>
-                """,
-                unsafe_allow_html=True,
-            )
-
-            c1, c2, c3, c4 = st.columns(4)
-            with c1:
-                frota_stat_card("Frota total", total, "veículos ativos", "blue")
-            with c2:
-                frota_stat_card("Disponíveis", qtd_disponiveis, "prontos para operação", "green")
-            with c3:
-                frota_stat_card(
-                    "Em contrato",
-                    qtd_alugados,
-                    f"{ocupacao_frota:.1f}% de ocupação",
-                    "indigo",
+            if tela_ativa == "Gestão de Frota":
+                qtd_disponiveis = (
+                    len(df_veiculos[df_veiculos["status"] == "Disponível"])
+                    if total else 0
                 )
-            with c4:
-                frota_stat_card("Em manutenção", qtd_manutencao, "atenção operacional", "amber")
+                qtd_alugados = (
+                    len(df_veiculos[df_veiculos["status"] == "Alugado"])
+                    if total else 0
+                )
+                qtd_manutencao = (
+                    len(df_veiculos[df_veiculos["status"] == "Manutenção"])
+                    if total else 0
+                )
+                ocupacao_frota = (qtd_alugados / total * 100) if total else 0.0
+
+                st.markdown(
+                    f"""
+                    <div class="kineo-frota-hero">
+                        <div>
+                            <div class="kineo-frota-eyebrow">Operação da frota</div>
+                            <h1>Gestão de Frota</h1>
+                            <p>Cadastre veículos, acompanhe disponibilidade, custos e manutenção preventiva em um único ambiente.</p>
+                        </div>
+                        <div class="kineo-frota-total">
+                            <span>Veículos ativos</span>
+                            <strong>{total}</strong>
+                        </div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+
+                c1, c2, c3, c4 = st.columns(4)
+                with c1:
+                    frota_stat_card("Frota total", total, "veículos ativos", "blue")
+                with c2:
+                    frota_stat_card("Disponíveis", qtd_disponiveis, "prontos para operação", "green")
+                with c3:
+                    frota_stat_card(
+                        "Em contrato",
+                        qtd_alugados,
+                        f"{ocupacao_frota:.1f}% de ocupação",
+                        "indigo",
+                    )
+                with c4:
+                    frota_stat_card("Em manutenção", qtd_manutencao, "atenção operacional", "amber")
             
-            pagina_frota = st.session_state["pagina_frota"]
+            pagina_frota = (
+                "Análise por Veículo"
+                if tela_ativa == "Relatórios"
+                else st.session_state["pagina_frota"]
+            )
 
             # ── Aba: Visão geral operacional ─────────────────────────────────────
             if pagina_frota == "Visão da Frota":
@@ -6524,6 +6602,27 @@ else:
                         lista_v = [f"{r['modelo']} ({r['placa']})" for _, r in df_merged.iterrows()]
                         sel = fcb.multiselect("Filtrar visualização", lista_v, default=lista_v)
 
+                        if tela_ativa == "Relatórios":
+                            df_export_veiculos = df_merged.loc[
+                                df_merged.apply(
+                                    lambda r: f"{r['modelo']} ({r['placa']})" in sel,
+                                    axis=1,
+                                ),
+                                ["placa", "modelo", "status", "km_atual", "valor_total"],
+                            ].rename(columns={
+                                "placa": "Placa",
+                                "modelo": "Modelo",
+                                "status": "Status",
+                                "km_atual": "KM Atual",
+                                "valor_total": "Total Gasto",
+                            })
+                            render_exportacao_relatorio(
+                                df_export_veiculos,
+                                "relatorio_analise_veiculos",
+                                "Veículos",
+                                "relatorio_analise_veiculos",
+                            )
+
                         for _, v in df_merged.iterrows():
                             label = f"{v['modelo']} ({v['placa']})"
                             if label not in sel: 
@@ -6951,7 +7050,10 @@ else:
         # ══════════════════════════════════════════════════════════════════════════
         # GESTÃO DE CUSTOS
         # ══════════════════════════════════════════════════════════════════════════
-        elif tela_ativa == "Gestão de Custos":
+        elif tela_ativa == "Gestão de Custos" or (
+            tela_ativa == "Relatórios"
+            and st.session_state["pagina_relatorios"] == "Custos e Despesas"
+        ):
             aplicar_css_modulos_v11()
 
             df_veiculos = carregar_dados_tabela(f"""
@@ -6989,22 +7091,23 @@ else:
                 custos_total_resumo = custos_mes_resumo = ticket_custo_resumo = 0.0
                 categorias_custo_resumo = 0
 
-            module_hero(
-                "Controle financeiro",
-                "Gestão de Custos",
-                "Acompanhe o impacto financeiro da frota e registre novas despesas somente quando necessário.",
-                "Despesas no mês",
-                fmt_brl(custos_mes_resumo),
-            )
-            rc1, rc2, rc3, rc4 = st.columns(4)
-            with rc1:
-                module_stat_card("Acumulado", fmt_brl(custos_total_resumo), "histórico de despesas")
-            with rc2:
-                module_stat_card("Lançamentos", len(df_custos_resumo), "registros financeiros")
-            with rc3:
-                module_stat_card("Ticket médio", fmt_brl(ticket_custo_resumo), "valor por lançamento")
-            with rc4:
-                module_stat_card("Categorias usadas", categorias_custo_resumo, "classificações com movimento")
+            if tela_ativa == "Gestão de Custos":
+                module_hero(
+                    "Controle financeiro",
+                    "Gestão de Custos",
+                    "Acompanhe o impacto financeiro da frota e registre novas despesas somente quando necessário.",
+                    "Despesas no mês",
+                    fmt_brl(custos_mes_resumo),
+                )
+                rc1, rc2, rc3, rc4 = st.columns(4)
+                with rc1:
+                    module_stat_card("Acumulado", fmt_brl(custos_total_resumo), "histórico de despesas")
+                with rc2:
+                    module_stat_card("Lançamentos", len(df_custos_resumo), "registros financeiros")
+                with rc3:
+                    module_stat_card("Ticket médio", fmt_brl(ticket_custo_resumo), "valor por lançamento")
+                with rc4:
+                    module_stat_card("Categorias usadas", categorias_custo_resumo, "classificações com movimento")
 
             if df_veiculos.empty:
                 st.warning(
@@ -7039,9 +7142,32 @@ else:
                     for _, r in df_veiculos.iterrows()
                 }
 
-                pagina_custos = st.session_state["pagina_custos"]
+                pagina_custos = (
+                    "Visão de Custos"
+                    if tela_ativa == "Relatórios"
+                    else st.session_state["pagina_custos"]
+                )
 
                 if pagina_custos == "Visão de Custos":
+                    if tela_ativa == "Relatórios" and not df_custos_resumo.empty:
+                        df_export_custos = df_custos_resumo[[
+                            "data_custo", "placa", "modelo", "categoria", "valor_total"
+                        ]].copy()
+                        df_export_custos["data_custo"] = df_export_custos["data_custo"].dt.strftime("%d/%m/%Y")
+                        df_export_custos = df_export_custos.rename(columns={
+                            "data_custo": "Data",
+                            "placa": "Placa",
+                            "modelo": "Modelo",
+                            "categoria": "Categoria",
+                            "valor_total": "Valor",
+                        })
+                        render_exportacao_relatorio(
+                            df_export_custos,
+                            "relatorio_custos_despesas",
+                            "Custos",
+                            "relatorio_custos_despesas",
+                        )
+
                     visao_custo_col, ranking_custo_col = st.columns([1.7, 1])
                     with visao_custo_col:
                         with st.container(border=True):
@@ -7208,11 +7334,11 @@ else:
                                 "Litros abastecidos",
                                 min_value=0.1,
                                 step=1.0,
-                                value=0.1,
+                                value=None,
                                 key=f"custos_litros_{custos_form_version}"
                             )
 
-                            if litros > 0:
+                            if litros is not None and litros > 0:
                                 preco_litro = valor / litros
                                 d3.caption(
                                     f"Preço calculado: **{fmt_brl(preco_litro)}/L**"
@@ -8129,7 +8255,10 @@ else:
         # ══════════════════════════════════════════════════════════════════════════
         # GESTÃO DE COBRANÇAS
         # ══════════════════════════════════════════════════════════════════════════
-        elif tela_ativa == "Gestão de Cobranças":
+        elif tela_ativa == "Gestão de Cobranças" or (
+            tela_ativa == "Relatórios"
+            and st.session_state["pagina_relatorios"] == "Financeiro"
+        ):
             aplicar_css_modulos_v11()
 
             STATUS_COBRANCA = [
@@ -8209,24 +8338,29 @@ else:
                 int((df_contratos_fin["ativo"] == 1).sum())
                 if not df_contratos_fin.empty else 0
             )
-            module_hero(
-                "Receita e recebimentos",
-                "Gestão de Cobranças",
-                "Acompanhe previsão, emissão e recebimento antes de acessar as rotinas de cobrança.",
-                "Previsto no mês",
-                fmt_brl(previsto_mes_resumo),
-            )
-            cb1, cb2, cb3, cb4 = st.columns(4)
-            with cb1:
-                module_stat_card("Contratos ativos", contratos_ativos_cob, "carteira geradora de receita")
-            with cb2:
-                module_stat_card("Pendentes", pendentes_resumo, "em emissão ou envio")
-            with cb3:
-                module_stat_card("Recebidas", recebidas_resumo, "cobranças liquidadas")
-            with cb4:
-                module_stat_card("Vencidas", vencidas_resumo, "exigem acompanhamento")
+            if tela_ativa == "Gestão de Cobranças":
+                module_hero(
+                    "Receita e recebimentos",
+                    "Gestão de Cobranças",
+                    "Acompanhe previsão, emissão e recebimento antes de acessar as rotinas de cobrança.",
+                    "Previsto no mês",
+                    fmt_brl(previsto_mes_resumo),
+                )
+                cb1, cb2, cb3, cb4 = st.columns(4)
+                with cb1:
+                    module_stat_card("Contratos ativos", contratos_ativos_cob, "carteira geradora de receita")
+                with cb2:
+                    module_stat_card("Pendentes", pendentes_resumo, "em emissão ou envio")
+                with cb3:
+                    module_stat_card("Recebidas", recebidas_resumo, "cobranças liquidadas")
+                with cb4:
+                    module_stat_card("Vencidas", vencidas_resumo, "exigem acompanhamento")
 
-            pagina_cobrancas = st.session_state["pagina_cobrancas"]
+            pagina_cobrancas = (
+                "Visão Financeira"
+                if tela_ativa == "Relatórios"
+                else st.session_state["pagina_cobrancas"]
+            )
 
             # ──────────────────────────────────────────────────────────────────────
             # VISÃO FINANCEIRA — RECEITA - CUSTOS = RESULTADO
@@ -8706,6 +8840,17 @@ else:
                         df_resultado = pd.DataFrame(linhas_resultado).sort_values(
                             "Resultado", ascending=False
                         )
+                        if tela_ativa == "Relatórios":
+                            nome_base_financeiro = (
+                                f"relatorio_financeiro_{comp_ini.replace('/', '_')}_"
+                                f"{comp_fim.replace('/', '_')}"
+                            )
+                            render_exportacao_relatorio(
+                                df_resultado,
+                                nome_base_financeiro,
+                                "Financeiro",
+                                "relatorio_financeiro",
+                            )
                         df_resultado_exib = df_resultado.copy()
                         for col_monetaria in [
                             "Receita prevista", "Receita recebida", "Custos", "Resultado"
@@ -10208,7 +10353,10 @@ else:
         # ══════════════════════════════════════════════════════════════════════════
         # CONTRATOS E LOCAÇÃO
         # ══════════════════════════════════════════════════════════════════════════
-        elif tela_ativa == "Contratos e Locação":
+        elif tela_ativa == "Contratos e Locação" or (
+            tela_ativa == "Relatórios"
+            and st.session_state["pagina_relatorios"] == "Contratos"
+        ):
             aplicar_css_modulos_v11()
 
             df_veiculos = carregar_dados_tabela(f"""
@@ -10274,24 +10422,29 @@ else:
                 vencendo_contratos = reservas_contratos = 0
                 receita_fixa_contratos = 0.0
 
-            module_hero(
-                "Ciclo comercial",
-                "Contratos e Locação",
-                "Acompanhe a carteira vigente e acesse abertura, finalização ou substituição apenas quando necessário.",
-                "Receita fixa mensal",
-                fmt_brl(receita_fixa_contratos),
-            )
-            ct1, ct2, ct3, ct4 = st.columns(4)
-            with ct1:
-                module_stat_card("Contratos ativos", contratos_ativos_qtd, "carteira vigente")
-            with ct2:
-                module_stat_card("Vencendo em 30 dias", vencendo_contratos, "atenção comercial")
-            with ct3:
-                module_stat_card("Reservas em uso", reservas_contratos, "substituições temporárias")
-            with ct4:
-                module_stat_card("Encerrados", contratos_encerrados_qtd, "histórico preservado")
+            if tela_ativa == "Contratos e Locação":
+                module_hero(
+                    "Ciclo comercial",
+                    "Contratos e Locação",
+                    "Acompanhe a carteira vigente e acesse abertura, finalização ou substituição apenas quando necessário.",
+                    "Receita fixa mensal",
+                    fmt_brl(receita_fixa_contratos),
+                )
+                ct1, ct2, ct3, ct4 = st.columns(4)
+                with ct1:
+                    module_stat_card("Contratos ativos", contratos_ativos_qtd, "carteira vigente")
+                with ct2:
+                    module_stat_card("Vencendo em 30 dias", vencendo_contratos, "atenção comercial")
+                with ct3:
+                    module_stat_card("Reservas em uso", reservas_contratos, "substituições temporárias")
+                with ct4:
+                    module_stat_card("Encerrados", contratos_encerrados_qtd, "histórico preservado")
 
-            pagina_contratos = st.session_state["pagina_contratos"]
+            pagina_contratos = (
+                "Visão de Contratos"
+                if tela_ativa == "Relatórios"
+                else st.session_state["pagina_contratos"]
+            )
 
             # ── Aba 1: Visão Geral ────────────────────────────────────────────────
             if pagina_contratos == "Visão de Contratos":
@@ -10321,13 +10474,17 @@ else:
                     for col in ["Valor", "Multa (%)", "Juros (%)"]:
                         df_exib[col] = pd.to_numeric(df_exib[col], errors="coerce").fillna(0.0)
 
-                    _, h2 = st.columns([4, 1])
-                    with h2:
-                        csv_ct = convert_df_to_csv(df_exib[[
-                            "Cliente", "CNPJ", "Veículo Principal", "Veículo Reserva", "Uso Atual",
-                            "Status", "Início", "Fim", "Tipo", "Valor"
-                        ]])
-                        st.download_button("Exportar Dados", csv_ct, "base_contratos.csv", "text/csv", use_container_width=True)
+                    df_export_contratos = df_exib[[
+                        "Cliente", "CNPJ", "Veículo Principal", "Veículo Reserva", "Uso Atual",
+                        "Status", "Início", "Fim", "Tipo", "Valor"
+                    ]].copy()
+                    if tela_ativa == "Relatórios":
+                        render_exportacao_relatorio(
+                            df_export_contratos,
+                            "relatorio_contratos",
+                            "Contratos",
+                            "relatorio_contratos",
+                        )
 
                     df_ativos = df_exib[df_exib["ativo"] == 1].copy()
                     df_encerrados = df_exib[df_exib["ativo"] == 0].copy()
