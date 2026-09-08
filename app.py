@@ -712,6 +712,18 @@ BUTTON_WIDTH = "calc(100% - 34px)" if pinned else "48px"
 POINTER_EVENTS = "auto" if pinned else "none"
 SIDEBAR_COLLAPSE_DELAY = "0.10s" if not pinned else "0s"
 
+def injetar_css_sem_fluxo(css: str):
+    """Injeta CSS sem criar um item visual na pilha principal do Streamlit."""
+    if hasattr(st, "html"):
+        st.html(css)
+    else:
+        # Fallback para versões antigas: o marcador permite ao CSS global
+        # retirar do fluxo o stElementContainer que carrega apenas estilos.
+        st.markdown(
+            '<div class="kineo-css-infra" aria-hidden="true"></div>' + css,
+            unsafe_allow_html=True,
+        )
+
 css_template = f"""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
@@ -776,8 +788,41 @@ a.header-anchor {{
     width: 100% !important;
     max-width: none !important;
     margin: 0 !important;
-    padding: 2rem 2.5rem 2rem !important;
+    padding: 1.75rem 2.5rem 2rem !important;
     box-sizing: border-box !important;
+}}
+
+/* Elementos técnicos de infraestrutura não devem gerar linhas vazias na pilha principal. */
+[data-testid="stMain"] [data-testid="stElementContainer"]:has(.kineo-css-infra),
+section.main [data-testid="stElementContainer"]:has(.kineo-css-infra),
+[data-testid="stMain"] [data-testid="stElementContainer"]:has(.kineo-dashboard-v11),
+section.main [data-testid="stElementContainer"]:has(.kineo-dashboard-v11),
+[data-testid="stMain"] [data-testid="stElementContainer"]:has(.kineo-frota-v11),
+section.main [data-testid="stElementContainer"]:has(.kineo-frota-v11) {{
+    display: none !important;
+    height: 0 !important;
+    min-height: 0 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+}}
+
+/* O wrapper estrutural do sino não deve ocupar altura na pilha vertical do Streamlit. */
+[data-testid="stMain"] [data-testid="stElementContainer"]:has(.st-key-alertas_sino),
+section.main [data-testid="stElementContainer"]:has(.st-key-alertas_sino) {{
+    display: contents !important;
+    height: 0 !important;
+    min-height: 0 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+}}
+
+/* O sino é global, mas não deve reservar uma linha acima do conteúdo. */
+.st-key-alertas_sino {{
+    position: fixed !important;
+    top: .55rem;
+    right: 2.5rem;
+    z-index: 1000;
+    width: auto !important;
 }}
 
 [data-testid="stSidebarCollapseButton"] {{ 
@@ -1538,7 +1583,12 @@ label {{
     }}
 
     .block-container {{
-        padding: 0.9rem 0.85rem 2rem !important;
+        padding: .65rem 0.85rem 2rem !important;
+    }}
+
+    .st-key-alertas_sino {{
+        top: .45rem;
+        right: .85rem;
     }}
 
     [data-testid="stHorizontalBlock"] {{
@@ -1716,7 +1766,7 @@ label {{
 }}
 </style>
 """
-st.markdown(css_template, unsafe_allow_html=True)
+injetar_css_sem_fluxo(css_template)
 
 
 # ─── HELPERS & CACHE DE CONSULTAS (OTIMIZAÇÃO DE PERFORMANCE) ───────────────
@@ -2575,19 +2625,18 @@ def fmt_brl(valor: float) -> str:
 
 def aplicar_css_dashboard_v11():
     """Aplica o tema executivo somente à tela do Painel Gerencial V11."""
-    st.markdown(
+    injetar_css_sem_fluxo(
         """
 <style>
 /* Streamlit varia o nome do container principal entre versões.
    Todos os seletores abaixo mantêm o dashboard junto ao topo da viewport. */
-.block-container:has(.kineo-dashboard-v11),
-[data-testid="stMainBlockContainer"]:has(.kineo-dashboard-v11),
-[data-testid="stMain"] .block-container:has(.kineo-dashboard-v11),
-section.main .block-container:has(.kineo-dashboard-v11) {
+.block-container,
+[data-testid="stMainBlockContainer"],
+[data-testid="stMain"] .block-container,
+section.main .block-container {
     width: 100% !important;
     max-width: none !important;
     margin-top: 0 !important;
-    padding-top: .5rem !important;
     padding-bottom: 2rem !important;
 }
 
@@ -2746,43 +2795,6 @@ section.main .block-container:has(.kineo-dashboard-v11) {
 .kineo-mini-stat span { color: #738198; font-size: .7rem; font-weight: 650; }
 .kineo-mini-stat strong { margin-top: 3px; color: #17385F; font-size: 1.08rem; }
 
-.kineo-alert-card,
-.kineo-ok-card {
-    min-height: 125px;
-    padding: 17px;
-    border-radius: 16px;
-}
-
-.kineo-alert-card {
-    border: 1px solid #F3D8A6;
-    background: #FFF9ED;
-}
-
-.kineo-alert-card .tag {
-    display: inline-block;
-    margin-bottom: 10px;
-    padding: 3px 8px;
-    border-radius: 999px;
-    color: #985B06;
-    background: #FFEBC5;
-    font-size: .61rem;
-    font-weight: 800;
-    letter-spacing: .05em;
-    text-transform: uppercase;
-}
-
-.kineo-alert-card strong { display: block; color: #5E431D; font-size: .88rem; }
-.kineo-alert-card p { margin: 6px 0 0; color: #806A4A; font-size: .72rem; line-height: 1.45; }
-
-.kineo-ok-card {
-    min-height: auto;
-    border: 1px solid #CDEBDD;
-    color: #147253;
-    background: #F0FAF6;
-    font-size: .84rem;
-    font-weight: 650;
-}
-
 .kineo-contract-row,
 .kineo-health-row {
     display: flex;
@@ -2817,8 +2829,7 @@ section.main .block-container:has(.kineo-dashboard-v11) {
     .kineo-dashboard-period { min-width: 0; width: 100%; }
 }
 </style>
-        """,
-        unsafe_allow_html=True,
+        """
     )
 
 
@@ -2856,12 +2867,11 @@ def dashboard_mini_stat(titulo, valor):
 
 def aplicar_css_gestao_frota_v11():
     """Moderniza a Gestão de Frota sem interferir nas demais telas."""
-    st.markdown(
+    injetar_css_sem_fluxo(
         """
 <style>
-.block-container:has(.kineo-frota-v11) {
+.block-container {
     max-width: 1600px;
-    padding-top: 1.35rem;
     padding-bottom: 2.5rem;
 }
 
@@ -3038,8 +3048,7 @@ def aplicar_css_gestao_frota_v11():
     .block-container:has(.kineo-frota-v11) [data-baseweb="tab-list"] { overflow-x: auto; }
 }
 </style>
-        """,
-        unsafe_allow_html=True,
+        """
     )
 
 
@@ -3063,12 +3072,11 @@ def frota_stat_card(titulo, valor, detalhe, tom="blue"):
 
 def aplicar_css_modulos_v11():
     """Linguagem visual compartilhada pelos módulos operacionais internos."""
-    st.markdown(
+    injetar_css_sem_fluxo(
         """
 <style>
 .block-container:has(.kineo-module-v11) {
     max-width: 1600px;
-    padding-top: 1.35rem;
     padding-bottom: 2.5rem;
 }
 .kineo-module-hero {
@@ -3111,8 +3119,7 @@ def aplicar_css_modulos_v11():
 .block-container:has(.kineo-module-v11) [data-testid="stDataFrame"] { overflow:hidden; border:1px solid #E3EAF3; border-radius:13px; }
 @media(max-width:900px){.kineo-module-hero{align-items:flex-start;flex-direction:column;padding:21px}.kineo-module-badge{min-width:0;width:100%;text-align:left}.block-container:has(.kineo-module-v11) [data-baseweb="tab-list"]{overflow-x:auto}}
 </style>
-        """,
-        unsafe_allow_html=True,
+        """
     )
 
 
@@ -3196,6 +3203,415 @@ def _intervalo_efetivo(valor_empresa, valor_fabricante):
         return fabricante
     return None
 
+CATEGORIAS_DESPESAS = [
+    "Combustível",
+    "Manutenção Preventiva",
+    "Manutenção Corretiva",
+    "Custos com Motorista",
+    "Lavagem/Higienização",
+    "Consórcio/Financiamento",
+    "Seguro",
+    "Rastreamento",
+    "Licenças/Autorizações",
+    "Impostos/Documentação",
+    "Multas",
+    "Outros",
+]
+
+FORMAS_PAGAMENTO_DESPESAS = [
+    "Pix",
+    "Dinheiro",
+    "PR",
+    "Cartão de Crédito",
+]
+
+
+def gerar_modelo_importacao_despesas():
+    colunas = [
+        "data", "placa", "categoria", "descricao", "valor", "km", "litros",
+        "forma_pagamento", "condicao_pagamento", "parcelas", "motorista_matricula",
+        "tipo_manutencao",
+    ]
+    despesas = pd.DataFrame(columns=colunas)
+    instrucoes = pd.DataFrame({
+        "Campo": colunas,
+        "Obrigatório": [
+            "Sim", "Sim", "Sim", "Não", "Sim", "Não", "Não", "Sim", "Não",
+            "Não", "Não", "Não",
+        ],
+        "Formato": [
+            "DD/MM/AAAA ou data válida do Excel", "Texto", "Categoria permitida", "Texto",
+            "Número maior que zero", "Número maior ou igual a zero", "Número maior que zero",
+            "Forma permitida", "À vista ou Parcelado", "Inteiro maior que 1", "Texto", "Texto",
+        ],
+        "Orientação": [
+            "Data do lançamento.", "Placa de veículo ativo cadastrado no Kineo.",
+            "Use uma das categorias permitidas abaixo.", "Opcional.",
+            "Valor numérico, sem formatação monetária.", "Opcional. Não atualiza o KM nesta etapa.",
+            "Opcional para combustível; deixe vazio se desconhecido.",
+            "Pix, Dinheiro, PR ou Cartão de Crédito.",
+            "Aplicável ao Cartão de Crédito.",
+            "Obrigatório quando a condição for Parcelado.",
+            "Matrícula de motorista ativo, se houver vínculo.",
+            "Opcional para manutenção; vincula ao plano somente se encontrado.",
+        ],
+    })
+    categorias = pd.DataFrame({"Categorias permitidas": CATEGORIAS_DESPESAS})
+    formas_pagamento = pd.DataFrame({"Formas de pagamento permitidas": FORMAS_PAGAMENTO_DESPESAS})
+
+    buffer = BytesIO()
+    with pd.ExcelWriter(buffer, engine="openpyxl") as writer:
+        despesas.to_excel(writer, index=False, sheet_name="Despesas")
+        instrucoes.to_excel(writer, index=False, sheet_name="Instruções", startrow=0)
+        categorias.to_excel(writer, index=False, sheet_name="Instruções", startrow=len(instrucoes) + 3)
+        formas_pagamento.to_excel(
+            writer,
+            index=False,
+            sheet_name="Instruções",
+            startrow=len(instrucoes) + len(categorias) + 6,
+        )
+    buffer.seek(0)
+    return buffer.getvalue()
+
+
+def validar_importacao_despesas(df, veiculos_por_placa, motoristas_por_matricula, itens_por_plano):
+    linhas_normalizadas = []
+    categorias_manutencao = {"Manutenção Preventiva", "Manutenção Corretiva"}
+
+    for indice, row in df.iterrows():
+        erros = []
+        avisos = []
+        data = pd.to_datetime(row.get("data"), errors="coerce", dayfirst=True)
+        placa = _texto_planilha(row.get("placa")).upper()
+        categoria = _texto_planilha(row.get("categoria"))
+        descricao = _texto_planilha(row.get("descricao")) or None
+        valor = _numero_planilha(row.get("valor"))
+        km = _numero_planilha(row.get("km"))
+        litros = _numero_planilha(row.get("litros"))
+        km_informado = bool(_texto_planilha(row.get("km")))
+        litros_informado = bool(_texto_planilha(row.get("litros")))
+        forma_pagamento = _texto_planilha(row.get("forma_pagamento"))
+        condicao_pagamento = _texto_planilha(row.get("condicao_pagamento")) or None
+        parcelas = _numero_planilha(row.get("parcelas"))
+        matricula = _texto_planilha(row.get("motorista_matricula")) or None
+        tipo_manutencao = _texto_planilha(row.get("tipo_manutencao")) or None
+
+        if pd.isna(data):
+            erros.append("Data obrigatória inválida.")
+            data_normalizada = None
+        else:
+            data_normalizada = data.date()
+        if not placa:
+            erros.append("Placa obrigatória não informada.")
+            veiculo = None
+        else:
+            veiculo = veiculos_por_placa.get(placa)
+            if veiculo is None:
+                erros.append("Veículo ativo não encontrado para a placa informada.")
+        if categoria not in CATEGORIAS_DESPESAS:
+            erros.append("Categoria inválida.")
+        if valor is None or valor <= 0:
+            erros.append("Valor obrigatório deve ser numérico e maior que zero.")
+        if km_informado and (km is None or km < 0):
+            erros.append("KM deve ser numérico e maior ou igual a zero.")
+        if forma_pagamento not in FORMAS_PAGAMENTO_DESPESAS:
+            erros.append("Forma de pagamento inválida.")
+        if forma_pagamento == "Cartão de Crédito":
+            if condicao_pagamento is not None and condicao_pagamento not in {"À vista", "Parcelado"}:
+                erros.append("Condição de pagamento inválida para Cartão de Crédito.")
+            if condicao_pagamento == "Parcelado":
+                if (
+                    parcelas is None
+                    or not float(parcelas).is_integer()
+                    or not 2 <= int(parcelas) <= 48
+                ):
+                    erros.append("Parcelas deve ser um número inteiro entre 2 e 48.")
+                else:
+                    parcelas = int(parcelas)
+        else:
+            condicao_pagamento = None
+            parcelas = None
+
+        if categoria == "Combustível":
+            if litros_informado and (litros is None or litros <= 0):
+                erros.append("Litros deve ser numérico e maior que zero quando informado.")
+        else:
+            if litros is not None:
+                avisos.append("Litros ignorado para categoria diferente de Combustível.")
+            litros = None
+
+        motorista = None
+        motorista_id = None
+        if matricula:
+            motorista = motoristas_por_matricula.get(matricula)
+            if motorista is None:
+                erros.append("Motorista ativo não encontrado para a matrícula informada.")
+            else:
+                motorista_id = int(motorista["id"])
+
+        plano_item_id = None
+        if categoria in categorias_manutencao:
+            if tipo_manutencao:
+                plano_id = (
+                    veiculo.get("plano_manutencao_id")
+                    if veiculo is not None
+                    else None
+                )
+                if plano_id is not None and pd.notna(plano_id):
+                    item = itens_por_plano.get((int(plano_id), tipo_manutencao.casefold()))
+                    if item is not None:
+                        plano_item_id = int(item["id"])
+                    else:
+                        avisos.append("Tipo de manutenção não vinculado ao plano do veículo.")
+                else:
+                    avisos.append("Tipo de manutenção não vinculado ao plano do veículo.")
+            else:
+                tipo_manutencao = None
+        else:
+            if tipo_manutencao:
+                avisos.append("Tipo de manutenção ignorado para categoria diferente de manutenção.")
+            tipo_manutencao = None
+
+        linhas_normalizadas.append({
+            "Linha": int(indice) + 2,
+            "Data": data_normalizada.strftime("%d/%m/%Y") if data_normalizada else None,
+            "_data_custo": data_normalizada,
+            "Placa": placa or None,
+            "Veículo": (
+                f"{veiculo['modelo']} · {veiculo['placa']}" if veiculo is not None else None
+            ),
+            "Categoria": categoria or None,
+            "Descrição": descricao,
+            "Valor": valor,
+            "KM": km,
+            "Litros": litros,
+            "Forma de pagamento": forma_pagamento or None,
+            "Condição": condicao_pagamento,
+            "Parcelas": parcelas,
+            "Motorista": motorista["nome"] if motorista is not None else None,
+            "Tipo manutenção": tipo_manutencao,
+            "veiculo_id": int(veiculo["id"]) if veiculo is not None else None,
+            "motorista_id": motorista_id,
+            "plano_item_id": plano_item_id,
+            "Status": "Inválida" if erros else "Válida",
+            "Erros/Avisos": " ".join(
+                [f"Erro: {erro}" for erro in erros]
+                + [f"Aviso: {aviso}" for aviso in avisos]
+            ) or None,
+        })
+
+    return pd.DataFrame(linhas_normalizadas)
+
+
+def importar_despesas_validadas(resultado_importacao, empresa_id, usuario_id, usuario_nome):
+    session = SessionLocal()
+    despesas_importadas = 0
+    lancamentos_gerados = 0
+    categorias_manutencao = {"Manutenção Preventiva", "Manutenção Corretiva"}
+
+    try:
+        for _, linha in resultado_importacao.iterrows():
+            if linha.get("Status") != "Válida":
+                raise ValueError(
+                    "A importação contém linha inválida e não pode ser processada integralmente."
+                )
+
+            linha_planilha = int(linha["Linha"])
+            veiculo_db = session.query(Veiculo).filter(
+                Veiculo.id == int(linha["veiculo_id"]),
+                Veiculo.empresa_id == int(empresa_id),
+                Veiculo.ativo == 1,
+            ).first()
+            if veiculo_db is None:
+                raise ValueError(
+                    f"Linha {linha_planilha}: o veículo deixou de estar disponível para esta empresa."
+                )
+
+            motorista_db = None
+            motorista_id = linha.get("motorista_id")
+            if pd.notna(motorista_id):
+                motorista_db = session.query(Motorista).filter(
+                    Motorista.id == int(motorista_id),
+                    Motorista.empresa_id == int(empresa_id),
+                    Motorista.ativo == 1,
+                ).first()
+                if motorista_db is None:
+                    raise ValueError(
+                        f"Linha {linha_planilha}: o motorista deixou de estar disponível para esta empresa."
+                    )
+
+            plano_item_db = None
+            plano_item_id = linha.get("plano_item_id")
+            if pd.notna(plano_item_id):
+                plano_item_db = tenant_get(
+                    session, ItemPlanoManutencao, int(plano_item_id), empresa_id
+                )
+                if plano_item_db is None:
+                    raise ValueError(
+                        f"Linha {linha_planilha}: o item de manutenção não pertence mais a esta empresa."
+                    )
+
+            data_custo = linha.get("_data_custo")
+            if isinstance(data_custo, pd.Timestamp):
+                data_custo = data_custo.date()
+            if data_custo is None or pd.isna(data_custo):
+                raise ValueError(f"Linha {linha_planilha}: data normalizada inválida.")
+
+            valor_total_decimal = decimal_monetario(linha["Valor"])
+            categoria = linha["Categoria"]
+            descricao = linha.get("Descrição")
+            descricao = None if pd.isna(descricao) else str(descricao)
+            forma_pagamento = linha["Forma de pagamento"]
+            condicao_pagamento = linha.get("Condição")
+            condicao_pagamento = None if pd.isna(condicao_pagamento) else condicao_pagamento
+            parcelas = linha.get("Parcelas")
+            parcelas = None if pd.isna(parcelas) else int(parcelas)
+            km_importado = linha.get("KM")
+            km_importado = None if pd.isna(km_importado) else float(km_importado)
+            litros_importados = linha.get("Litros")
+            litros_importados = None if pd.isna(litros_importados) else float(litros_importados)
+            tipo_manutencao = linha.get("Tipo manutenção")
+            tipo_manutencao = None if pd.isna(tipo_manutencao) else tipo_manutencao
+            motorista_nome = motorista_db.nome if motorista_db is not None else None
+            custo_base_id = None
+            quantidade_linha = 0
+
+            parcelado = (
+                forma_pagamento == "Cartão de Crédito"
+                and condicao_pagamento == "Parcelado"
+                and parcelas is not None
+                and 2 <= parcelas <= 48
+            )
+
+            if parcelado:
+                valores_parcelas = dividir_valor_parcelas(
+                    valor_total_decimal, parcelas
+                )
+                for i, valor_parcela in enumerate(valores_parcelas):
+                    dt_parcela = add_months(data_custo, i)
+                    descricao_parcela = (
+                        f"{descricao} (Parcela {i + 1}/{parcelas})"
+                        if descricao
+                        else f"Parcela {i + 1}/{parcelas}"
+                    )
+                    contrato_parcela = obter_contrato_por_veiculo_data(
+                        session,
+                        empresa_id,
+                        veiculo_db.id,
+                        dt_parcela,
+                    )
+                    custo_parcela = Custo(
+                        empresa_id=empresa_id,
+                        veiculo_id=veiculo_db.id,
+                        contrato_id=(
+                            contrato_parcela.id if contrato_parcela is not None else None
+                        ),
+                        data_custo=dt_parcela,
+                        categoria=categoria,
+                        descricao=descricao_parcela,
+                        valor_total=valor_parcela,
+                        km_momento=(
+                            km_importado
+                            if i == 0
+                            else (0 if km_importado is not None else None)
+                        ),
+                        litros=litros_importados if i == 0 else None,
+                        usuario_lancamento=usuario_nome,
+                        forma_pagamento=forma_pagamento,
+                        condicao_pagamento=condicao_pagamento,
+                        parcelas=parcelas,
+                        motorista_id=(motorista_db.id if motorista_db is not None else None),
+                        motorista=motorista_nome,
+                        comprovante=None,
+                        tipo_manutencao=tipo_manutencao,
+                        plano_item_id=(plano_item_db.id if plano_item_db is not None else None),
+                    )
+                    session.add(custo_parcela)
+                    quantidade_linha += 1
+                    if i == 0:
+                        session.flush()
+                        custo_base_id = custo_parcela.id
+            else:
+                contrato_custo = obter_contrato_por_veiculo_data(
+                    session,
+                    empresa_id,
+                    veiculo_db.id,
+                    data_custo,
+                )
+                custo_unico = Custo(
+                    empresa_id=empresa_id,
+                    veiculo_id=veiculo_db.id,
+                    contrato_id=(contrato_custo.id if contrato_custo is not None else None),
+                    data_custo=data_custo,
+                    categoria=categoria,
+                    descricao=descricao,
+                    valor_total=valor_total_decimal,
+                    km_momento=km_importado,
+                    litros=litros_importados,
+                    usuario_lancamento=usuario_nome,
+                    forma_pagamento=forma_pagamento,
+                    condicao_pagamento=condicao_pagamento,
+                    parcelas=parcelas,
+                    motorista_id=(motorista_db.id if motorista_db is not None else None),
+                    motorista=motorista_nome,
+                    comprovante=None,
+                    tipo_manutencao=tipo_manutencao,
+                    plano_item_id=(plano_item_db.id if plano_item_db is not None else None),
+                )
+                session.add(custo_unico)
+                session.flush()
+                custo_base_id = custo_unico.id
+                quantidade_linha = 1
+
+            if (
+                plano_item_db is not None
+                and categoria in categorias_manutencao
+                and custo_base_id is not None
+            ):
+                session.add(ManutencaoRealizada(
+                    empresa_id=empresa_id,
+                    veiculo_id=veiculo_db.id,
+                    plano_item_id=plano_item_db.id,
+                    custo_id=custo_base_id,
+                    data_execucao=data_custo,
+                    km_execucao=(
+                        km_importado
+                        if km_importado is not None and km_importado > 0
+                        else None
+                    ),
+                    observacoes=descricao or tipo_manutencao,
+                    origem="Gestão de Custos",
+                ))
+
+            if (
+                km_importado is not None
+                and km_importado > float(veiculo_db.km_atual or 0)
+            ):
+                veiculo_db.km_atual = km_importado
+
+            registrar_auditoria(
+                session,
+                empresa_id,
+                usuario_id,
+                "CUSTO_IMPORTADO",
+                "Custo",
+                custo_base_id,
+                (
+                    f"Linha: {linha_planilha}; categoria: {categoria}; "
+                    f"veículo: {veiculo_db.id}; lançamentos: {quantidade_linha}"
+                ),
+            )
+            despesas_importadas += 1
+            lancamentos_gerados += quantidade_linha
+
+        session.commit()
+        return despesas_importadas, lancamentos_gerados
+    except Exception:
+        session.rollback()
+        raise
+    finally:
+        session.close()
+
 
 def gerar_planilha_planos(df_base):
     """Gera o modelo XLSX usado tanto na importação individual quanto massiva."""
@@ -3239,9 +3655,10 @@ def gerar_planilha_planos(df_base):
     return buffer.getvalue()
 
 
-def diagnostico_manutencao(empresa_id):
+def diagnostico_manutencao(empresa_id, carregar=None):
     """Calcula a situação de cada item de manutenção a partir do plano e do histórico real."""
-    df_v = carregar_dados_tabela(f"""
+    carregar = carregar or carregar_dados_tabela
+    df_v = carregar(f"""
         SELECT id, placa, fabricante, modelo, ano_modelo, versao, motorizacao,
                km_atual, status, plano_manutencao_id
         FROM veiculos
@@ -3252,7 +3669,7 @@ def diagnostico_manutencao(empresa_id):
     if df_v.empty:
         return pd.DataFrame()
 
-    df_itens = carregar_dados_tabela(f"""
+    df_itens = carregar(f"""
         SELECT i.id, i.plano_id, i.codigo_servico, i.tipo_manutencao, i.descricao,
                i.intervalo_fabricante_km, i.intervalo_fabricante_meses,
                i.intervalo_empresa_km, i.intervalo_empresa_meses
@@ -3263,7 +3680,7 @@ def diagnostico_manutencao(empresa_id):
     if df_itens.empty:
         return pd.DataFrame()
 
-    df_hist = carregar_dados_tabela(f"""
+    df_hist = carregar(f"""
         SELECT id, veiculo_id, plano_item_id, custo_id, data_execucao, km_execucao, origem
         FROM manutencoes_realizadas
         WHERE empresa_id = :empresa_id
@@ -3698,6 +4115,267 @@ def toggle_menu_relatorios():
     st.session_state["menu_cobrancas_aberto"] = False
     st.session_state["menu_pessoas_aberto"] = False
     st.session_state["menu_relatorios_aberto"] = novo_estado
+
+# ─── CENTRAL DE ALERTAS OPERACIONAIS (dinâmica, sem persistência) ────────────
+def ordenar_alertas_operacionais(alertas):
+    prioridade = {"CRÍTICO": 0, "ATENÇÃO": 1, "INFORMATIVO": 2}
+    def chave(a):
+        distancias = [v for v in (a.get("dias_restantes"), a.get("km_restante"))
+                      if v is not None]
+        urgencia = min(distancias) if distancias else float("inf")
+        return (prioridade[a["severidade"]], urgencia, a["categoria"], a["id"])
+    return sorted(alertas, key=chave)
+
+
+def obter_alertas_operacionais(empresa_id):
+    """Reutiliza o diagnóstico operacional; consultas em lote, sem cache."""
+    empresa_id = int(empresa_id)
+    with engine.connect() as conn:
+        def carregar(query, tenant, params=None):
+            if int(tenant) != empresa_id:
+                raise ValueError("Empresa incompatível na consulta de alertas.")
+            parametros = dict(params or {})
+            parametros["empresa_id"] = empresa_id
+            return pd.read_sql(sql_text(query), conn, params=parametros)
+
+        diagnostico = diagnostico_manutencao(empresa_id, carregar=carregar)
+        contratos = carregar("""
+            SELECT c.id, c.cliente, c.data_fim, v.placa
+            FROM contratos c
+            LEFT JOIN veiculos v ON v.id = c.veiculo_id AND v.empresa_id = c.empresa_id
+            WHERE c.empresa_id = :empresa_id AND c.ativo = 1
+              AND c.data_fim IS NOT NULL
+        """, empresa_id)
+        cobrancas = carregar("""
+            SELECT id, cliente, mes_ano, vencimento, status, valor_previsto
+            FROM cobrancas_mensais
+            WHERE empresa_id = :empresa_id AND vencimento IS NOT NULL
+        """, empresa_id)
+        motoristas = carregar("""
+            SELECT id, nome, validade_cnh
+            FROM motoristas
+            WHERE empresa_id = :empresa_id AND ativo = 1 AND validade_cnh IS NOT NULL
+        """, empresa_id)
+
+    hoje = hoje_local()
+    alertas = []
+    def adicionar(categoria, entidade, entidade_id, titulo, referencia, descricao,
+                  modulo, pagina, dias=None, km=None, data_ref=None, item_id=None,
+                  severidade=None):
+        critico = (dias is not None and dias < 0)
+        alertas.append({
+            "id": f"{empresa_id}:{entidade}:{entidade_id}:{item_id or ''}",
+            "empresa_id": empresa_id, "categoria": categoria,
+            "severidade": severidade or ("CRÍTICO" if critico else "ATENÇÃO"),
+            "titulo": titulo, "referencia": referencia, "descricao": descricao,
+            "entidade_tipo": entidade, "entidade_id": int(entidade_id),
+            "data_referencia": data_ref, "dias_restantes": dias, "km_restante": km,
+            "dias_atraso": max(-dias, 0) if dias is not None else None,
+            "km_excedido": max(-km, 0) if km is not None else None,
+            "modulo": modulo, "subpagina": pagina,
+        })
+
+    for _, r in diagnostico.iterrows():
+        if r["Status"] not in ("VENCIDO", "PRÓXIMO"):
+            continue
+        km = int(r["Faltam KM"]) if pd.notna(r["Faltam KM"]) else None
+        dias = int(r["Faltam Dias"]) if pd.notna(r["Faltam Dias"]) else None
+        detalhes = [str(r["Serviço"])]
+        if km is not None:
+            quantidade = f"{abs(km):,}".replace(",", ".")
+            detalhes.append(f"{quantidade} km acima do previsto" if km < 0
+                            else ("Limite de KM atingido" if km == 0
+                                  else f"Faltam {quantidade} km"))
+        if dias is not None:
+            detalhes.append(f"Vencida há {abs(dias)} dia(s)" if dias < 0
+                            else ("Prazo atingido hoje" if dias == 0
+                                  else f"Vence em {dias} dia(s)"))
+        adicionar(
+            "Manutenção", "veiculo", r["veiculo_id"],
+            "Manutenção vencida" if r["Status"] == "VENCIDO" else "Manutenção próxima",
+            f"{r['Placa']} · {r['Modelo']}", " · ".join(detalhes),
+            "Gestão de Frota", "Saúde da Frota", dias, km,
+            coerce_date(r["Próxima Data"]), int(r["plano_item_id"]),
+            "CRÍTICO" if r["Status"] == "VENCIDO" else "ATENÇÃO",
+        )
+
+    for categoria, entidade, dados, coluna_data, limite, modulo, pagina in [
+        ("Contratos", "contrato", contratos, "data_fim", 30,
+         "Contratos e Locação", "Gestão de Contratos"),
+        ("Cobranças", "cobranca", cobrancas, "vencimento", 7,
+         "Gestão de Cobranças", "Operação Mensal"),
+        ("Motoristas", "motorista", motoristas, "validade_cnh", 30,
+         "Pessoas e Acessos", "Motoristas"),
+    ]:
+        for _, r in dados.iterrows():
+            if categoria == "Cobranças" and normalizar_status_cobranca(r["status"]) in (
+                "Recebida", "Cancelada", "Não cobrar"
+            ):
+                continue
+            data_ref = coerce_date(r[coluna_data])
+            if data_ref is None:
+                continue
+            dias = (data_ref - hoje).days
+            if dias > limite:
+                continue
+            if categoria == "Contratos":
+                titulo = "Contrato vencido" if dias < 0 else "Contrato próximo do vencimento"
+                referencia = f"{r['placa'] or ''} · {r['cliente']}"
+            elif categoria == "Cobranças":
+                titulo = "Cobrança vencida" if dias < 0 else "Cobrança próxima do vencimento"
+                referencia = f"{r['cliente']} · {r['mes_ano']}"
+            else:
+                titulo = "CNH vencida" if dias < 0 else "CNH próxima do vencimento"
+                referencia = str(r["nome"])
+            descricao = (f"Vencimento há {abs(dias)} dia(s)" if dias < 0
+                         else ("Vence hoje" if dias == 0 else f"Vence em {dias} dia(s)"))
+            if categoria == "Cobranças":
+                descricao += f" · {fmt_brl(r['valor_previsto'])}"
+            adicionar(categoria, entidade, r["id"], titulo, referencia, descricao,
+                      modulo, pagina, dias=dias, data_ref=data_ref)
+    return ordenar_alertas_operacionais(alertas)
+
+
+def abrir_central_alertas():
+    if st.session_state.get("ultimo_menu") != "Central de Alertas":
+        st.session_state["alertas_retorno"] = {
+            "empresa_id": st.session_state["empresa_id"],
+            "menu": st.session_state.get("ultimo_menu", "Painel Gerencial"),
+            "tela_config": st.session_state.get("tela_config", False),
+        }
+    # Preserva subpáginas e accordions; não muda o funcionamento da sidebar.
+    st.session_state["ultimo_menu"] = "Central de Alertas"
+    st.session_state["tela_config"] = False
+
+
+def voltar_central_alertas():
+    retorno = st.session_state.pop("alertas_retorno", {})
+    menu = retorno.get("menu", "Painel Gerencial")
+    if (retorno.get("empresa_id") != st.session_state.get("empresa_id")
+            or menu == "Central de Alertas"
+            or (menu == "Configurações" and st.session_state.get("perfil") != "admin")):
+        menu = "Painel Gerencial"
+    st.session_state["ultimo_menu"] = menu
+    st.session_state["tela_config"] = menu == "Configurações"
+
+
+def abrir_destino_alerta(alerta):
+    if alerta["empresa_id"] != st.session_state.get("empresa_id"):
+        return
+    destinos = {
+        "Manutenção": (set_pagina_frota, "Saúde da Frota"),
+        "Contratos": (set_pagina_contratos, "Gestão de Contratos"),
+        "Cobranças": (set_pagina_cobrancas, "Operação Mensal"),
+        "Motoristas": (set_pagina_pessoas, "Motoristas"),
+    }
+    destino = destinos.get(alerta["categoria"])
+    if destino:
+        destino[0](destino[1])
+
+
+def renderizar_card_alerta(alerta):
+    classe = {"CRÍTICO": "critico", "ATENÇÃO": "atencao", "INFORMATIVO": "info"}[alerta["severidade"]]
+    esc = lambda texto: html.escape(str(texto))
+    st.markdown(
+        f'<article class="kineo-op-alerta"><span class="kineo-op-badge {classe}">'
+        f'{esc(alerta["severidade"])}</span><strong>{esc(alerta["titulo"])}</strong>'
+        f'<div>{esc(alerta["referencia"])}</div><p>{esc(alerta["descricao"])}</p></article>',
+        unsafe_allow_html=True,
+    )
+
+
+def renderizar_painel_rapido_alertas(alertas):
+    st.markdown("#### Alertas operacionais")
+    criticos = sum(a["severidade"] == "CRÍTICO" for a in alertas)
+    atencao = sum(a["severidade"] == "ATENÇÃO" for a in alertas)
+    st.caption(f"{criticos} críticos · {atencao} atenção")
+    if not alertas:
+        st.caption("Nenhum alerta ativo")
+    for alerta in alertas[:5]:
+        renderizar_card_alerta(alerta)
+    st.button("Ver todos", key="alertas_ver_todos", on_click=abrir_central_alertas)
+
+
+def renderizar_sino_alertas(alertas):
+    injetar_css_sem_fluxo("""
+    <style>
+    .kineo-op-alerta { background:#F8FAFC; border:1px solid #E2E8F0; border-radius:10px;
+        padding:12px 14px; margin:6px 0; color:#1E293B; overflow-wrap:anywhere; }
+    .kineo-op-alerta strong { display:block; margin:6px 0; font-size:.92rem; }
+    .kineo-op-alerta p { color:#64748B; margin:5px 0 0; font-size:.82rem; }
+    .kineo-op-badge { display:inline-block; padding:2px 7px; border-radius:12px; font-size:.68rem; }
+    .kineo-op-badge.critico { color:#B91C1C; background:#FEF2F2; }
+    .kineo-op-badge.atencao { color:#92400E; background:#FFFBEB; }
+    .kineo-op-badge.info { color:#6366F1; background:#EEF2FF; }
+    .st-key-alertas_sino [data-testid="stPopover"] { display:flex; justify-content:flex-end; }
+    .st-key-alertas_sino { text-align:right; }
+    .kineo-op-resumo { display:grid; grid-template-columns:repeat(4,1fr); gap:8px; margin:12px 0; }
+    .kineo-op-resumo div { border:1px solid #E2E8F0; border-radius:8px; padding:10px; }
+    .kineo-op-resumo strong { display:block; color:#0B1120; }
+    @media(max-width:768px) {
+        .kineo-op-resumo { grid-template-columns:1fr; }
+        .kineo-op-alerta { padding:10px; }
+    }
+    </style>
+    """)
+    total = len(alertas)
+    cor = ("#B91C1C" if any(a["severidade"] == "CRÍTICO" for a in alertas)
+           else "#92400E" if any(a["severidade"] == "ATENÇÃO" for a in alertas) else "#6366F1")
+    if total:
+        injetar_css_sem_fluxo(f"""
+        <style>
+        .st-key-alertas_sino [data-testid="stPopover"] button p {{
+            border-radius:12px; background:{cor}; color:white; padding:1px 6px;
+        }}
+        </style>
+        """)
+    with st.container(key="alertas_sino"):
+        # Popover nativo: nenhum overlay manual ou controle fixo sobre o mobile.
+        if hasattr(st, "popover"):
+            with st.popover(str(total) if total else "", icon=":material/notifications:",
+                            help="Alertas operacionais", use_container_width=False):
+                renderizar_painel_rapido_alertas(alertas)
+        else:
+            with st.expander(f"Alertas operacionais{f' · {total}' if total else ''}",
+                             icon=":material/notifications:"):
+                renderizar_painel_rapido_alertas(alertas)
+
+
+def renderizar_central_alertas(alertas):
+    st.button("Voltar", icon=":material/arrow_back:", key="alertas_voltar",
+              on_click=voltar_central_alertas)
+    page_header("Central de Alertas",
+                "Acompanhe pendências e vencimentos que exigem atenção na operação.")
+    resumo = [("Críticos", sum(a["severidade"] == "CRÍTICO" for a in alertas)),
+              ("Atenção", sum(a["severidade"] == "ATENÇÃO" for a in alertas)),
+              ("Informativos", sum(a["severidade"] == "INFORMATIVO" for a in alertas)),
+              ("Total", len(alertas))]
+    st.markdown('<div class="kineo-op-resumo">' + "".join(
+        f"<div>{rotulo}<strong>{valor}</strong></div>" for rotulo, valor in resumo
+    ) + "</div>", unsafe_allow_html=True)
+    severidade = st.selectbox("Severidade", ["Todos", "Crítico", "Atenção", "Informativo"],
+                             key="alertas_filtro_severidade")
+    categoria = st.selectbox("Categoria", ["Todas", "Manutenção", "Contratos", "Cobranças", "Motoristas"],
+                            key="alertas_filtro_categoria")
+    busca = st.text_input("Buscar placa, cliente, motorista ou descrição",
+                          key="alertas_busca").strip().casefold()
+    filtrados = [a for a in alertas
+                 if (severidade == "Todos" or a["severidade"] == severidade.upper())
+                 and (categoria == "Todas" or a["categoria"] == categoria)
+                 and (not busca or busca in " ".join(
+                     str(a[c]) for c in ("titulo", "referencia", "descricao")).casefold())]
+    if not alertas:
+        st.caption("Nenhum alerta ativo")
+    elif not filtrados:
+        st.caption("Nenhum alerta corresponde aos filtros selecionados.")
+    ctas = {"Manutenção": "Ver veículo", "Contratos": "Ver contrato",
+            "Cobranças": "Ver cobrança", "Motoristas": "Ver motorista"}
+    for alerta in filtrados:
+        renderizar_card_alerta(alerta)
+        st.button(ctas.get(alerta["categoria"], "Ver detalhe"),
+                  key=f"alertas_acao_{alerta['id']}", on_click=abrir_destino_alerta,
+                  args=(alerta,))
+
 
 def set_perfil():
     st.session_state["tela_config"] = False
@@ -5029,6 +5707,7 @@ else:
         NOVOS_SUBMENUS = {
             "custos": (set_pagina_custos, [
                 ("Registrar Despesa", ":material/add_card:"),
+                ("Importar Despesas", ":material/upload_file:"),
                 ("Lançamentos", ":material/receipt_long:"),
             ]),
             "contratos": (set_pagina_contratos, [
@@ -5180,6 +5859,9 @@ else:
             on_click=efetuar_logout
         )
 
+    alertas_operacionais = obter_alertas_operacionais(emp_id)
+    renderizar_sino_alertas(alertas_operacionais)
+
     # Transparência versionada: mostra no primeiro acesso à versão atual da política.
     if (
         (st.session_state.get("privacidade_pendente") or st.session_state.get("privacidade_rever"))
@@ -5195,7 +5877,10 @@ else:
         # ══════════════════════════════════════════════════════════════════════════
         # PAINEL GERENCIAL
         # ══════════════════════════════════════════════════════════════════════════
-        if tela_ativa == "Painel Gerencial":
+        if tela_ativa == "Central de Alertas":
+            renderizar_central_alertas(alertas_operacionais)
+
+        elif tela_ativa == "Painel Gerencial":
             aplicar_css_dashboard_v11()
             st.markdown('<div class="kineo-dashboard-v11"></div>', unsafe_allow_html=True)
 
@@ -5583,37 +6268,6 @@ else:
                 dashboard_mini_stat("Vencendo em 30 dias", contratos_vencendo_30)
             with m5:
                 dashboard_mini_stat("Reservas em uso", reservas_em_uso)
-
-            # ── Alertas executivos ────────────────────────────────────────────────
-            st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
-            st.markdown(
-                """
-                <div class="kineo-section-heading">
-                    <div><h2>Atenção operacional</h2><p>Pontos que merecem acompanhamento antes de virarem impacto.</p></div>
-                </div>
-                """,
-                unsafe_allow_html=True,
-            )
-
-            if alertas:
-                cols_alerta = st.columns(min(len(alertas), 4))
-                for idx, (titulo, descricao) in enumerate(alertas[:4]):
-                    with cols_alerta[idx]:
-                        st.markdown(
-                            f"""
-                            <div class="kineo-alert-card">
-                                <span class="tag">Acompanhar</span>
-                                <strong>{html.escape(str(titulo))}</strong>
-                                <p>{html.escape(str(descricao))}</p>
-                            </div>
-                            """,
-                            unsafe_allow_html=True,
-                        )
-            else:
-                st.markdown(
-                    '<div class="kineo-ok-card">✓ Nenhum alerta operacional relevante neste momento.</div>',
-                    unsafe_allow_html=True,
-                )
 
             # ── Visão analítica principal ─────────────────────────────────────────
             st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
@@ -7115,27 +7769,8 @@ else:
                     icon=None
                 )
             else:
-                CATEGORIAS = [
-                    "Combustível",
-                    "Manutenção Preventiva",
-                    "Manutenção Corretiva",
-                    "Custos com Motorista",
-                    "Lavagem/Higienização",
-                    "Consórcio/Financiamento",
-                    "Seguro",
-                    "Rastreamento",
-                    "Licenças/Autorizações",
-                    "Impostos/Documentação",
-                    "Multas",
-                    "Outros"
-                ]
-
-                FORMAS_PAGAMENTO = [
-                    "Pix",
-                    "Dinheiro",
-                    "PR",
-                    "Cartão de Crédito"
-                ]
+                CATEGORIAS = CATEGORIAS_DESPESAS
+                FORMAS_PAGAMENTO = FORMAS_PAGAMENTO_DESPESAS
 
                 opcoes_v = {
                     f"{r['modelo']} · {r['placa']}": int(r["id"])
@@ -7702,6 +8337,215 @@ else:
 
                             finally:
                                 session.close()
+                # ──────────────────────────────────────────────────────────────
+                # IMPORTAR DESPESAS — VALIDAÇÃO, PRÉ-VISUALIZAÇÃO E CONFIRMAÇÃO
+                # ──────────────────────────────────────────────────────────────
+                elif pagina_custos == "Importar Despesas":
+                    custos_importacao_version = st.session_state.setdefault(
+                        "custos_importacao_version", 0
+                    )
+                    mensagem_importacao = st.session_state.pop(
+                        "custos_importacao_flash", None
+                    )
+                    st.markdown("### Importar despesas")
+                    st.caption(
+                        "Valide lançamentos em massa antes de incluí-los na Gestão de Custos."
+                    )
+                    if mensagem_importacao:
+                        st.success(mensagem_importacao)
+                    st.info(
+                        "Use o modelo para organizar a planilha e valide todos os dados antes de confirmar.",
+                        icon=None,
+                    )
+                    st.download_button(
+                        "Baixar modelo Excel",
+                        gerar_modelo_importacao_despesas(),
+                        "modelo_importacao_despesas_kineo.xlsx",
+                        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                        key="custos_baixar_modelo_importacao",
+                    )
+                    arquivo_importacao = st.file_uploader(
+                        "Enviar planilha de despesas",
+                        type=["xlsx", "xls"],
+                        key=f"custos_importacao_despesas_arquivo_{custos_importacao_version}",
+                    )
+
+                    if arquivo_importacao is not None:
+                        ok_upload, erro_upload = validar_upload_basico(
+                            arquivo_importacao, {"xlsx", "xls"}, max_mb=10
+                        )
+                        if not ok_upload:
+                            st.error(erro_upload, icon=None)
+                        else:
+                            try:
+                                df_importacao = pd.read_excel(
+                                    BytesIO(arquivo_importacao.getvalue()), dtype=object
+                                )
+                            except Exception:
+                                st.error(
+                                    "Não foi possível ler a planilha. Verifique se o arquivo está válido.",
+                                    icon=None,
+                                )
+                            else:
+                                df_importacao.columns = [
+                                    str(coluna).strip().lower() for coluna in df_importacao.columns
+                                ]
+                                obrigatorias_importacao = [
+                                    "data", "placa", "categoria", "valor", "forma_pagamento"
+                                ]
+                                faltantes_importacao = [
+                                    coluna for coluna in obrigatorias_importacao
+                                    if coluna not in df_importacao.columns
+                                ]
+                                if faltantes_importacao:
+                                    st.error(
+                                        "Colunas obrigatórias ausentes: "
+                                        + ", ".join(faltantes_importacao),
+                                        icon=None,
+                                    )
+                                elif len(df_importacao) > 5000:
+                                    st.error(
+                                        "A planilha possui mais de 5.000 linhas e não pode ser processada.",
+                                        icon=None,
+                                    )
+                                elif df_importacao.empty:
+                                    st.info("A planilha não possui linhas para validar.", icon=None)
+                                else:
+                                    df_veiculos_importacao = carregar_dados_tabela(
+                                        """
+                                        SELECT id, placa, modelo, plano_manutencao_id
+                                        FROM veiculos
+                                        WHERE empresa_id = :empresa_id
+                                          AND COALESCE(ativo, 1) = 1
+                                        """,
+                                        emp_id,
+                                    )
+                                    df_motoristas_importacao = carregar_dados_tabela(
+                                        """
+                                        SELECT id, nome, matricula
+                                        FROM motoristas
+                                        WHERE empresa_id = :empresa_id
+                                          AND COALESCE(ativo, 1) = 1
+                                        """,
+                                        emp_id,
+                                    )
+                                    df_itens_importacao = carregar_dados_tabela(
+                                        """
+                                        SELECT id, plano_id, tipo_manutencao
+                                        FROM itens_plano_manutencao
+                                        WHERE empresa_id = :empresa_id
+                                          AND COALESCE(ativo, 1) = 1
+                                        """,
+                                        emp_id,
+                                    )
+                                    veiculos_por_placa = {
+                                        _texto_planilha(veiculo["placa"]).upper(): veiculo
+                                        for _, veiculo in df_veiculos_importacao.iterrows()
+                                    }
+                                    motoristas_por_matricula = {
+                                        _texto_planilha(motorista["matricula"]): motorista
+                                        for _, motorista in df_motoristas_importacao.iterrows()
+                                        if _texto_planilha(motorista["matricula"])
+                                    }
+                                    itens_por_plano = {
+                                        (
+                                            int(item["plano_id"]),
+                                            _texto_planilha(item["tipo_manutencao"]).casefold(),
+                                        ): item
+                                        for _, item in df_itens_importacao.iterrows()
+                                    }
+                                    resultado_importacao = validar_importacao_despesas(
+                                        df_importacao,
+                                        veiculos_por_placa,
+                                        motoristas_por_matricula,
+                                        itens_por_plano,
+                                    )
+                                    total_linhas = len(resultado_importacao)
+                                    validas_importacao = int(
+                                        (resultado_importacao["Status"] == "Válida").sum()
+                                    )
+                                    invalidas_importacao = total_linhas - validas_importacao
+                                    mi1, mi2, mi3 = st.columns(3)
+                                    mi1.metric("Total de linhas", total_linhas)
+                                    mi2.metric("Válidas", validas_importacao)
+                                    mi3.metric("Inválidas", invalidas_importacao)
+                                    st.markdown("#### Pré-visualização da importação")
+                                    st.dataframe(
+                                        resultado_importacao[[
+                                            "Linha", "Data", "Placa", "Veículo", "Categoria", "Descrição",
+                                            "Valor", "KM", "Litros", "Forma de pagamento", "Condição",
+                                            "Parcelas", "Motorista", "Tipo manutenção", "Status", "Erros/Avisos",
+                                        ]],
+                                        use_container_width=True,
+                                        hide_index=True,
+                                    )
+                                    if invalidas_importacao > 0:
+                                        st.warning(
+                                            "Corrija todas as linhas inválidas antes de confirmar a importação. "
+                                            "A importação de despesas é realizada de forma integral.",
+                                            icon=None,
+                                        )
+                                    elif total_linhas > 0 and validas_importacao == total_linhas:
+                                        total_lancamentos_importacao = sum(
+                                            int(linha["Parcelas"])
+                                            if (
+                                                linha["Forma de pagamento"] == "Cartão de Crédito"
+                                                and linha["Condição"] == "Parcelado"
+                                                and pd.notna(linha["Parcelas"])
+                                            )
+                                            else 1
+                                            for _, linha in resultado_importacao.iterrows()
+                                        )
+                                        ci1, ci2 = st.columns(2)
+                                        ci1.metric("Despesas de origem", total_linhas)
+                                        ci2.metric(
+                                            "Lançamentos financeiros a gerar",
+                                            total_lancamentos_importacao,
+                                        )
+                                        confirmar_importacao = st.checkbox(
+                                            (
+                                                f"Confirmo a importação de {total_linhas} despesa(s), "
+                                                f"que gerará {total_lancamentos_importacao} lançamento(s)."
+                                            ),
+                                            key=f"custos_confirmar_importacao_{custos_importacao_version}",
+                                        )
+                                        executar_importacao = st.button(
+                                            "Confirmar importação",
+                                            icon=":material/upload_file:",
+                                            disabled=not confirmar_importacao,
+                                            key=f"custos_executar_importacao_{custos_importacao_version}",
+                                        )
+                                        if executar_importacao:
+                                            try:
+                                                despesas_criadas, lancamentos_criados = importar_despesas_validadas(
+                                                    resultado_importacao,
+                                                    emp_id,
+                                                    st.session_state["usuario_id"],
+                                                    st.session_state["nome"],
+                                                )
+                                            except ValueError as e:
+                                                st.error(
+                                                    f"{e} Nenhuma despesa foi gravada.",
+                                                    icon=None,
+                                                )
+                                            except Exception:
+                                                logger.exception(
+                                                    "Falha ao importar despesas em lote"
+                                                )
+                                                st.error(
+                                                    "Não foi possível concluir a importação. "
+                                                    "Nenhuma despesa foi gravada.",
+                                                    icon=None,
+                                                )
+                                            else:
+                                                st.session_state["custos_importacao_version"] += 1
+                                                st.session_state["custos_importacao_flash"] = (
+                                                    f"Importação concluída: {despesas_criadas} despesa(s) "
+                                                    f"importada(s) e {lancamentos_criados} lançamento(s) "
+                                                    "financeiro(s) gerado(s)."
+                                                )
+                                                st.cache_data.clear()
+                                                st.rerun()
 
                 # ──────────────────────────────────────────────────────────────
                 # LANÇAMENTOS FINANCEIROS

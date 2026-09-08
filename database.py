@@ -524,22 +524,37 @@ def garantir_colunas_usuarios():
     })
 
 
-def garantir_indice_tenant_usuarios_sqlite():
-    """Atualiza bancos SQLite legados para a FK composta de auditoria.
+def garantir_indices_tenant_sqlite():
+    """Atualiza índices-pai de FKs compostas em bancos SQLite legados.
 
     A aplicação só executa esta correção estrutural no modo de migração local.
     Ambientes gerenciados continuam usando migrations controladas.
     """
     if engine.dialect.name != "sqlite":
         return
+
+    indices_tenant = {
+        "usuarios": "uq_usuarios_empresa_id",
+        "veiculos": "uq_veiculos_empresa_id",
+        "contratos": "uq_contratos_empresa_id",
+        "motoristas": "uq_motoristas_empresa_id",
+        "planos_manutencao": "uq_planos_empresa_id",
+        "itens_plano_manutencao": "uq_itens_plano_empresa_id",
+        "custos": "uq_custos_empresa_id",
+        "cobrancas_recorrentes": "uq_cobrancas_rec_empresa_id",
+    }
     inspector = inspect(engine)
-    if "usuarios" not in inspector.get_table_names():
-        return
+    tabelas_existentes = set(inspector.get_table_names())
     with engine.begin() as conn:
-        conn.execute(text(
-            "CREATE UNIQUE INDEX IF NOT EXISTS uq_usuarios_empresa_id "
-            "ON usuarios (empresa_id, id)"
-        ))
+        for tabela, nome_indice in indices_tenant.items():
+            if tabela not in tabelas_existentes:
+                continue
+            colunas = {coluna["name"] for coluna in inspector.get_columns(tabela)}
+            if {"empresa_id", "id"}.issubset(colunas):
+                conn.execute(text(
+                    f"CREATE UNIQUE INDEX IF NOT EXISTS {nome_indice} "
+                    f"ON {tabela} (empresa_id, id)"
+                ))
 
 
 def garantir_colunas_contratos():
@@ -844,13 +859,13 @@ def inicializar_dados():
 if AUTO_MIGRATE:
     Base.metadata.create_all(bind=engine)
     garantir_colunas_usuarios()
-    garantir_indice_tenant_usuarios_sqlite()
     garantir_colunas_contratos()
     garantir_colunas_substituicoes()
     garantir_colunas_veiculos()
     garantir_colunas_custos()
     garantir_colunas_cobrancas_recorrentes()
     garantir_colunas_cobrancas_mensais()
+    garantir_indices_tenant_sqlite()
     Base.metadata.create_all(bind=engine)  # cria novas tabelas/índices somente em DEV local
     normalizar_dados_legados()
 
