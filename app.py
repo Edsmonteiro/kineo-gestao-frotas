@@ -16,7 +16,6 @@ import time
 import base64
 import html
 import re
-import logging
 import textwrap
 import json
 from io import BytesIO
@@ -25,7 +24,13 @@ from sqlalchemy import text as sql_text
 from sqlalchemy.exc import IntegrityError
 from zoneinfo import ZoneInfo
 from decimal import Decimal, ROUND_HALF_UP, ROUND_DOWN
-from kineo_core import email_valido, normalizar_email, parse_valor_monetario_br
+from kineo_core import (
+    classificar_alerta_data,
+    email_valido,
+    normalizar_email,
+    parse_valor_monetario_br,
+)
+from observability import configurar_logging, registrar_excecao
 
 try:
     import boto3
@@ -41,7 +46,20 @@ except Exception:
     streamlit_js_eval = None
     STREAMLIT_JS_EVAL_DISPONIVEL = False
 
-logger = logging.getLogger("kineo")
+logger = configurar_logging(APP_ENV, IS_MANAGED_ENV)
+
+
+def registrar_falha_tecnica(exc, mensagem, modulo, acao):
+    """Registra falha inesperada com contexto mínimo e código exibível."""
+    return registrar_excecao(
+        exc,
+        mensagem,
+        logger=logger,
+        empresa_id=st.session_state.get("empresa_id"),
+        usuario_id=st.session_state.get("usuario_id"),
+        modulo=modulo,
+        acao=acao,
+    )
 
 IS_PRODUCTION_APP = str(APP_ENV or "").strip().lower() in {"production", "prod"}
 
@@ -4215,9 +4233,10 @@ def obter_alertas_operacionais(empresa_id):
             data_ref = coerce_date(r[coluna_data])
             if data_ref is None:
                 continue
-            dias = (data_ref - hoje).days
-            if dias > limite:
+            classificacao = classificar_alerta_data(data_ref, limite, hoje)
+            if classificacao is None:
                 continue
+            severidade, dias = classificacao
             if categoria == "Contratos":
                 titulo = "Contrato vencido" if dias < 0 else "Contrato próximo do vencimento"
                 referencia = f"{r['placa'] or ''} · {r['cliente']}"
@@ -4232,7 +4251,8 @@ def obter_alertas_operacionais(empresa_id):
             if categoria == "Cobranças":
                 descricao += f" · {fmt_brl(r['valor_previsto'])}"
             adicionar(categoria, entidade, r["id"], titulo, referencia, descricao,
-                      modulo, pagina, dias=dias, data_ref=data_ref)
+                      modulo, pagina, dias=dias, data_ref=data_ref,
+                      severidade=severidade)
     return ordenar_alertas_operacionais(alertas)
 
 
@@ -5465,10 +5485,15 @@ if not st.session_state["autenticado"]:
                                 # Pequeno atraso reduz a utilidade de enumeração/tentativas em massa.
                                 time.sleep(0.5)
                             st.error("Credenciais inválidas ou acesso indisponível.")
-                except Exception:
+                except Exception as exc:
                     session.rollback()
-                    logger.exception("Falha inesperada na autenticação")
-                    st.error("Não foi possível concluir a autenticação. Tente novamente.", icon=None)
+                    codigo = registrar_falha_tecnica(
+                        exc, "Falha inesperada na autenticação", "autenticacao", "login"
+                    )
+                    st.error(
+                        f"Não foi possível concluir a autenticação. Código do erro: {codigo}",
+                        icon=None,
+                    )
                 finally:
                     session.close()
 
@@ -5859,7 +5884,13 @@ else:
             on_click=efetuar_logout
         )
 
-    alertas_operacionais = obter_alertas_operacionais(emp_id)
+    try:
+        alertas_operacionais = obter_alertas_operacionais(emp_id)
+    except Exception as exc:
+        registrar_falha_tecnica(
+            exc, "Falha ao calcular alertas operacionais", "alertas", "carregar"
+        )
+        alertas_operacionais = []
     renderizar_sino_alertas(alertas_operacionais)
 
     # Transparência versionada: mostra no primeiro acesso à versão atual da política.
@@ -7218,10 +7249,16 @@ else:
                             except ValueError as e:
                                 session.rollback()
                                 st.error(str(e), icon=None)
-                            except Exception:
+                            except Exception as exc:
                                 session.rollback()
-                                logger.exception("Falha em operação de frota/contrato")
-                                st.error("Não foi possível concluir a operação.", icon=None)
+                                codigo = registrar_falha_tecnica(
+                                    exc, "Falha em operação de frota/contrato",
+                                    "contratos", "substituicao"
+                                )
+                                st.error(
+                                    f"Não foi possível concluir a operação. Código do erro: {codigo}",
+                                    icon=None,
+                                )
                             finally:
                                 session.close()
 
@@ -8327,11 +8364,13 @@ else:
                             except ValueError as e:
                                 session.rollback()
                                 st.error(str(e), icon=None)
-                            except Exception:
+                            except Exception as exc:
                                 session.rollback()
-                                logger.exception("Falha ao registrar despesa")
+                                codigo = registrar_falha_tecnica(
+                                    exc, "Falha ao registrar despesa", "custos", "registrar_despesa"
+                                )
                                 st.error(
-                                    "Não foi possível registrar a despesa.",
+                                    f"Não foi possível registrar a despesa. Código do erro: {codigo}",
                                     icon=None
                                 )
 
@@ -8528,13 +8567,15 @@ else:
                                                     f"{e} Nenhuma despesa foi gravada.",
                                                     icon=None,
                                                 )
-                                            except Exception:
-                                                logger.exception(
-                                                    "Falha ao importar despesas em lote"
+                                            except Exception as exc:
+                                                codigo = registrar_falha_tecnica(
+                                                    exc, "Falha ao importar despesas em lote",
+                                                    "custos", "importar_despesas"
                                                 )
                                                 st.error(
                                                     "Não foi possível concluir a importação. "
-                                                    "Nenhuma despesa foi gravada.",
+                                                    "Nenhuma despesa foi gravada. "
+                                                    f"Código do erro: {codigo}",
                                                     icon=None,
                                                 )
                                             else:
@@ -10957,12 +10998,16 @@ else:
                             st.session_state["cobrancas_editor_version"] += 1
                             st.success("Competência atualizada. Liquidações recebidas foram congeladas no histórico.")
                             st.rerun()
-                        except Exception:
+                        except Exception as exc:
                             session.rollback()
-                            logger.exception("Falha ao salvar alterações da competência de cobrança")
+                            codigo = registrar_falha_tecnica(
+                                exc, "Falha ao salvar alterações da competência de cobrança",
+                                "cobrancas", "salvar_competencia"
+                            )
                             st.error(
                                 "Não foi possível salvar as alterações da competência. "
-                                "Revise as datas e os valores informados.",
+                                "Revise as datas e os valores informados. "
+                                f"Código do erro: {codigo}",
                                 icon=None,
                             )
                         finally:
