@@ -22,3 +22,7 @@ __pycache__/
 # Pasta Streamlit legada/local
 .streamlit/.streamlit/
 .vscode/
+
+# Logs locais de observabilidade
+logs/
+*.log
