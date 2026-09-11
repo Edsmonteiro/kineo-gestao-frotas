@@ -16,6 +16,7 @@ import time
 import base64
 import html
 import re
+import logging
 import textwrap
 import json
 from io import BytesIO
@@ -24,13 +25,7 @@ from sqlalchemy import text as sql_text
 from sqlalchemy.exc import IntegrityError
 from zoneinfo import ZoneInfo
 from decimal import Decimal, ROUND_HALF_UP, ROUND_DOWN
-from kineo_core import (
-    classificar_alerta_data,
-    email_valido,
-    normalizar_email,
-    parse_valor_monetario_br,
-)
-from observability import configurar_logging, registrar_excecao
+from kineo_core import email_valido, normalizar_email, parse_valor_monetario_br
 
 try:
     import boto3
@@ -46,20 +41,7 @@ except Exception:
     streamlit_js_eval = None
     STREAMLIT_JS_EVAL_DISPONIVEL = False
 
-logger = configurar_logging(APP_ENV, IS_MANAGED_ENV)
-
-
-def registrar_falha_tecnica(exc, mensagem, modulo, acao):
-    """Registra falha inesperada com contexto mínimo e código exibível."""
-    return registrar_excecao(
-        exc,
-        mensagem,
-        logger=logger,
-        empresa_id=st.session_state.get("empresa_id"),
-        usuario_id=st.session_state.get("usuario_id"),
-        modulo=modulo,
-        acao=acao,
-    )
+logger = logging.getLogger("kineo")
 
 IS_PRODUCTION_APP = str(APP_ENV or "").strip().lower() in {"production", "prod"}
 
@@ -3201,6 +3183,48 @@ def _numero_planilha(valor, inteiro=False):
         return None
 
 
+def parse_odometro_br(valor):
+    """Converte entrada de odômetro sem confundir milhar com decimal.
+
+    Em hodômetro, uma única separação seguida de 3 dígitos é tratada como milhar:
+    26.699 -> 26699 e 26,699 -> 26699.
+    Também aceita 26699,5 / 26.699,5 para quilometragem fracionada.
+    """
+    if valor is None or str(valor).strip() == "":
+        return 0.0
+
+    texto = str(valor).strip().replace(" ", "")
+    try:
+        if "," in texto and "." in texto:
+            # Aceita tanto 26.699,5 quanto 26,699.5.
+            if texto.rfind(",") > texto.rfind("."):
+                texto = texto.replace(".", "").replace(",", ".")
+            else:
+                texto = texto.replace(",", "")
+        elif texto.count(",") == 1:
+            esquerda, direita = texto.split(",", 1)
+            if direita.isdigit() and len(direita) == 3 and esquerda.replace("-", "").isdigit():
+                texto = esquerda + direita
+            else:
+                texto = texto.replace(",", ".")
+        elif texto.count(".") == 1:
+            esquerda, direita = texto.split(".", 1)
+            if direita.isdigit() and len(direita) == 3 and esquerda.replace("-", "").isdigit():
+                texto = esquerda + direita
+        elif texto.count(",") > 1:
+            texto = texto.replace(",", "")
+        elif texto.count(".") > 1:
+            texto = texto.replace(".", "")
+
+        numero = float(texto)
+    except (TypeError, ValueError):
+        raise ValueError("Informe o odômetro usando apenas números e separadores válidos. Ex.: 26.699.")
+
+    if numero < 0:
+        raise ValueError("O odômetro não pode ser negativo.")
+    return numero
+
+
 def _nome_plano_padrao(row):
     partes = [
         _texto_planilha(row.get("fabricante")),
@@ -4233,10 +4257,9 @@ def obter_alertas_operacionais(empresa_id):
             data_ref = coerce_date(r[coluna_data])
             if data_ref is None:
                 continue
-            classificacao = classificar_alerta_data(data_ref, limite, hoje)
-            if classificacao is None:
+            dias = (data_ref - hoje).days
+            if dias > limite:
                 continue
-            severidade, dias = classificacao
             if categoria == "Contratos":
                 titulo = "Contrato vencido" if dias < 0 else "Contrato próximo do vencimento"
                 referencia = f"{r['placa'] or ''} · {r['cliente']}"
@@ -4251,8 +4274,7 @@ def obter_alertas_operacionais(empresa_id):
             if categoria == "Cobranças":
                 descricao += f" · {fmt_brl(r['valor_previsto'])}"
             adicionar(categoria, entidade, r["id"], titulo, referencia, descricao,
-                      modulo, pagina, dias=dias, data_ref=data_ref,
-                      severidade=severidade)
+                      modulo, pagina, dias=dias, data_ref=data_ref)
     return ordenar_alertas_operacionais(alertas)
 
 
@@ -5485,15 +5507,10 @@ if not st.session_state["autenticado"]:
                                 # Pequeno atraso reduz a utilidade de enumeração/tentativas em massa.
                                 time.sleep(0.5)
                             st.error("Credenciais inválidas ou acesso indisponível.")
-                except Exception as exc:
+                except Exception:
                     session.rollback()
-                    codigo = registrar_falha_tecnica(
-                        exc, "Falha inesperada na autenticação", "autenticacao", "login"
-                    )
-                    st.error(
-                        f"Não foi possível concluir a autenticação. Código do erro: {codigo}",
-                        icon=None,
-                    )
+                    logger.exception("Falha inesperada na autenticação")
+                    st.error("Não foi possível concluir a autenticação. Tente novamente.", icon=None)
                 finally:
                     session.close()
 
@@ -5884,13 +5901,7 @@ else:
             on_click=efetuar_logout
         )
 
-    try:
-        alertas_operacionais = obter_alertas_operacionais(emp_id)
-    except Exception as exc:
-        registrar_falha_tecnica(
-            exc, "Falha ao calcular alertas operacionais", "alertas", "carregar"
-        )
-        alertas_operacionais = []
+    alertas_operacionais = obter_alertas_operacionais(emp_id)
     renderizar_sino_alertas(alertas_operacionais)
 
     # Transparência versionada: mostra no primeiro acesso à versão atual da política.
@@ -6782,9 +6793,15 @@ else:
                             cm4, cm5, cm6 = st.columns(3)
                             combustivel_veiculo = cm4.selectbox("Combustível", ["Não informado", "Flex", "Gasolina", "Etanol", "Diesel", "Elétrico", "Híbrido"], key=f"frota_combustivel_novo_{veiculo_form_version}")
                             transmissao = cm5.selectbox("Transmissão", ["Não informado", "Manual", "Automática", "Automatizada", "CVT"], key=f"frota_transmissao_novo_{veiculo_form_version}")
-                            km = cm6.number_input("KM atual", min_value=0.0, step=100.0, value=0.0, key=f"frota_km_novo_{veiculo_form_version}")
+                            km_txt = cm6.text_input(
+                                "KM atual",
+                                value="",
+                                placeholder="Ex.: 26.699",
+                                key=f"frota_km_novo_{veiculo_form_version}"
+                            )
 
                             d_inicio = km_ini = d_fim = km_fim = cliente = cnpj_v = tipo_v = None
+                            km_ini_txt = km_fim_txt = ""
                             valor_m = multa_c = juros_c = 0.0
                             is_ativo = False
                             
@@ -6797,7 +6814,12 @@ else:
                                 
                                 c3, c4   = st.columns(2)
                                 d_inicio = c3.date_input("Início do contrato", format="DD/MM/YYYY", key=f"frota_inicio_novo_{veiculo_form_version}")
-                                km_ini   = c4.number_input("KM na entrega", min_value=0.0, step=50.0, value=0.0, key=f"frota_km_entrega_novo_{veiculo_form_version}")
+                                km_ini_txt = c4.text_input(
+                                    "KM na entrega",
+                                    value="",
+                                    placeholder="Ex.: 26.699",
+                                    key=f"frota_km_entrega_novo_{veiculo_form_version}"
+                                )
                                 
                                 st.markdown("**Dados Financeiros do Contrato**")
                                 cf1, cf2 = st.columns(2)
@@ -6849,17 +6871,30 @@ else:
                                 if not is_ativo:
                                     c5, c6 = st.columns(2)
                                     d_fim  = c5.date_input("Data de devolução", format="DD/MM/YYYY", key=f"frota_fim_novo_{veiculo_form_version}")
-                                    km_fim = c6.number_input("KM na devolução", min_value=0.0, step=50.0, value=0.0, key=f"frota_km_devolucao_novo_{veiculo_form_version}")
+                                    km_fim_txt = c6.text_input(
+                                        "KM na devolução",
+                                        value="",
+                                        placeholder="Ex.: 31.420",
+                                        key=f"frota_km_devolucao_novo_{veiculo_form_version}"
+                                    )
 
                             if st.button("Salvar Veículo", use_container_width=True, key=f"btn_salvar_veiculo_{veiculo_form_version}"):
                                 if not placa or not modelo:
                                     st.error("Placa e Modelo são obrigatórios.", icon=None)
                                 else:
-                                    km_val = km or 0.0
-                                    session = SessionLocal()
                                     erro = False
-                                    
-                                    if status_novo == "Alugado" and not is_ativo:
+                                    try:
+                                        km_val = parse_odometro_br(km_txt)
+                                        if status_novo == "Alugado":
+                                            km_ini = parse_odometro_br(km_ini_txt)
+                                            if not is_ativo:
+                                                km_fim = parse_odometro_br(km_fim_txt)
+                                    except ValueError as exc:
+                                        st.error(str(exc), icon=None)
+                                        erro = True
+                                        km_val = 0.0
+
+                                    if status_novo == "Alugado" and not is_ativo and not erro:
                                         km_ini_v = km_ini or 0.0
                                         km_fim_v = km_fim or 0.0
                                         if d_fim < d_inicio or km_fim_v < km_ini_v:
@@ -6867,6 +6902,7 @@ else:
                                             erro = True
                                             
                                     if not erro:
+                                        session = SessionLocal()
                                         nv = Veiculo(
                                             empresa_id=emp_id,
                                             placa=placa.upper(),
@@ -7249,16 +7285,10 @@ else:
                             except ValueError as e:
                                 session.rollback()
                                 st.error(str(e), icon=None)
-                            except Exception as exc:
+                            except Exception:
                                 session.rollback()
-                                codigo = registrar_falha_tecnica(
-                                    exc, "Falha em operação de frota/contrato",
-                                    "contratos", "substituicao"
-                                )
-                                st.error(
-                                    f"Não foi possível concluir a operação. Código do erro: {codigo}",
-                                    icon=None,
-                                )
+                                logger.exception("Falha em operação de frota/contrato")
+                                st.error("Não foi possível concluir a operação.", icon=None)
                             finally:
                                 session.close()
 
@@ -8364,13 +8394,11 @@ else:
                             except ValueError as e:
                                 session.rollback()
                                 st.error(str(e), icon=None)
-                            except Exception as exc:
+                            except Exception:
                                 session.rollback()
-                                codigo = registrar_falha_tecnica(
-                                    exc, "Falha ao registrar despesa", "custos", "registrar_despesa"
-                                )
+                                logger.exception("Falha ao registrar despesa")
                                 st.error(
-                                    f"Não foi possível registrar a despesa. Código do erro: {codigo}",
+                                    "Não foi possível registrar a despesa.",
                                     icon=None
                                 )
 
@@ -8567,15 +8595,13 @@ else:
                                                     f"{e} Nenhuma despesa foi gravada.",
                                                     icon=None,
                                                 )
-                                            except Exception as exc:
-                                                codigo = registrar_falha_tecnica(
-                                                    exc, "Falha ao importar despesas em lote",
-                                                    "custos", "importar_despesas"
+                                            except Exception:
+                                                logger.exception(
+                                                    "Falha ao importar despesas em lote"
                                                 )
                                                 st.error(
                                                     "Não foi possível concluir a importação. "
-                                                    "Nenhuma despesa foi gravada. "
-                                                    f"Código do erro: {codigo}",
+                                                    "Nenhuma despesa foi gravada.",
                                                     icon=None,
                                                 )
                                             else:
@@ -10539,6 +10565,67 @@ else:
                     if existe is None:
                         faltantes.append(rec)
 
+                # Na competência atual, recorrências faltantes são geradas automaticamente.
+                # O histórico anterior permanece intacto: cada novo mês nasce como
+                # "Pendente de emissão", independentemente do status do mês anterior.
+                if faltantes and mes_sel == comp_atual:
+                    ano, mes = map(int, reversed(mes_sel.split("/")))
+                    novos_automaticos = 0
+                    for rec in faltantes:
+                        dia_emissao = (
+                            rec.dia_emissao
+                            or (rec.data_base_emissao.day if rec.data_base_emissao else 1)
+                        )
+                        dia_vencimento = (
+                            rec.dia_vencimento
+                            or (rec.data_base_vencimento.day if rec.data_base_vencimento else 10)
+                        )
+                        valor = (
+                            Decimal("0.00")
+                            if rec.tipo_valor == "Variável"
+                            else decimal_monetario(rec.valor_mensal)
+                        )
+                        session.add(CobrancaMensal(
+                            empresa_id=emp_id,
+                            contrato_id=rec.contrato_id,
+                            recorrente_id=rec.id,
+                            mes_ano=mes_sel,
+                            tipo="Recorrente",
+                            cliente=rec.cliente,
+                            forma_cobranca=rec.forma_cobranca,
+                            valor_previsto=valor,
+                            emissao_prevista=get_valid_date(ano, mes, int(dia_emissao)),
+                            vencimento=get_valid_date(ano, mes, int(dia_vencimento)),
+                            status="Pendente de emissão",
+                            multa=float(rec.multa or 0),
+                            juros=float(rec.juros or 0),
+                            observacoes=rec.observacoes,
+                        ))
+                        novos_automaticos += 1
+
+                    registrar_auditoria(
+                        session, emp_id, st.session_state["usuario_id"],
+                        "COBRANCAS_COMPETENCIA_GERADA_AUTOMATICAMENTE",
+                        "CobrancaMensal", None,
+                        f"Competência: {mes_sel}; cobranças geradas automaticamente: {novos_automaticos}",
+                    )
+                    try:
+                        session.commit()
+                    except IntegrityError:
+                        session.rollback()
+                        st.cache_data.clear()
+                    except Exception:
+                        session.rollback()
+                        logger.exception("Falha ao gerar automaticamente cobranças recorrentes da competência atual")
+                        session.close()
+                        st.error("Não foi possível preparar automaticamente as cobranças deste mês.", icon=None)
+                        st.stop()
+                    else:
+                        st.cache_data.clear()
+
+                    session.close()
+                    st.rerun()
+
                 if faltantes:
                     with st.container(border=True):
                         st.info(
@@ -10998,16 +11085,12 @@ else:
                             st.session_state["cobrancas_editor_version"] += 1
                             st.success("Competência atualizada. Liquidações recebidas foram congeladas no histórico.")
                             st.rerun()
-                        except Exception as exc:
+                        except Exception:
                             session.rollback()
-                            codigo = registrar_falha_tecnica(
-                                exc, "Falha ao salvar alterações da competência de cobrança",
-                                "cobrancas", "salvar_competencia"
-                            )
+                            logger.exception("Falha ao salvar alterações da competência de cobrança")
                             st.error(
                                 "Não foi possível salvar as alterações da competência. "
-                                "Revise as datas e os valores informados. "
-                                f"Código do erro: {codigo}",
+                                "Revise as datas e os valores informados.",
                                 icon=None,
                             )
                         finally:
@@ -11434,7 +11517,12 @@ else:
                         cnpj = cb.text_input("Documento (CNPJ/CPF)", key=f"nc_cnpj_{contrato_form_version}")
                         cc, cd = st.columns(2)
                         d_inicio = cc.date_input("Início da Vigência", format="DD/MM/YYYY", key=f"nc_inicio_{contrato_form_version}")
-                        km_ini = cd.number_input("Odômetro de Saída", min_value=0.0, step=50.0, value=0.0, key=f"nc_km_ini_{contrato_form_version}")
+                        km_ini_txt = cd.text_input(
+                            "Odômetro de Saída",
+                            value="",
+                            placeholder="Ex.: 26.699",
+                            key=f"nc_km_ini_{contrato_form_version}",
+                        )
 
                         st.markdown("---")
                         st.markdown("**Acordo Comercial**")
@@ -11484,6 +11572,12 @@ else:
                             if not cliente.strip():
                                 st.error("Identificação do Locatário obrigatória.", icon=None)
                             else:
+                                try:
+                                    km_ini = parse_odometro_br(km_ini_txt)
+                                except ValueError as e:
+                                    st.error(str(e), icon=None)
+                                    st.stop()
+
                                 session = SessionLocal()
                                 try:
                                     veiculo = tenant_get(session, Veiculo, opcoes_v[veiculo_sel], emp_id)
@@ -11547,11 +11641,17 @@ else:
 
                         e_dfim = None
                         e_kmfim = float(row_ct["km_final"] or 0)
+                        e_kmfim_txt = ""
                         if not e_ativo:
                             ee, ef = st.columns(2)
                             dt_fim = pd.to_datetime(row_ct["data_fim"], errors="coerce")
                             e_dfim = ee.date_input("Baixa do Contrato", value=hoje_local() if pd.isna(dt_fim) else dt_fim.date(), key="ec_df")
-                            e_kmfim = ef.number_input("Odômetro de Chegada", min_value=0.0, step=50.0, value=e_kmfim, key="ec_kmf")
+                            e_kmfim_txt = ef.text_input(
+                                "Odômetro de Chegada",
+                                value=(f"{e_kmfim:,.0f}".replace(",", ".") if e_kmfim else ""),
+                                placeholder="Ex.: 31.420",
+                                key="ec_kmf",
+                            )
                             st.info(
                                 "Ao encerrar o contrato, o Kineo desativa a cobrança recorrente e cancela "
                                 "automaticamente as competências futuras ainda não recebidas. O histórico "
@@ -11666,6 +11766,7 @@ else:
                                 else:
                                     contrato.ativo = 0
                                     contrato.data_fim = e_dfim
+                                    e_kmfim = parse_odometro_br(e_kmfim_txt)
                                     contrato.km_final = e_kmfim or 0.0
                                     resultado_cobrancas = encerrar_cobrancas_contrato(
                                         session, emp_id, contrato.id, e_dfim
